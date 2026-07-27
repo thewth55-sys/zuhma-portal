@@ -1,0 +1,31 @@
+# ---- Python / backend ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Node / frontend ----
+node_modules/
+.next/
+out/
+dist/
+*.tsbuildinfo
+
+# ---- Env / secretos (NUNCA commitear) ----
+.env
+.env.local
+.env.*.local
+frontend/.env.local
+backend/.env
+# ...pero sí versionamos las plantillas *.example
+!*.example
+
+# ---- SO / editor ----
+.DS_Store
+.idea/
+.vscode/
+*.log

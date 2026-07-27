@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --brand-ink: #26242b;
+  --accent: #f26152;
+  --accent-2: #f7902e;
+  --accent-soft: #fdece6;
+  --bg: #f6f6fb;
+  --surface: #ffffff;
+  --line: #e9e8f0;
+  --ink: #16151d;
+  --muted: #6b6a7b;
+  --faint: #9997a8;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14.5px;
+  line-height: 1.5;
+}
+
+/* Icono base (hereda de <svg> como en el prototipo) */
+.zi {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
