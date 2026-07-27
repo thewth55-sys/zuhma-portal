@@ -11,6 +11,21 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci || npm install
 COPY . .
+
+# Las NEXT_PUBLIC_* se hornean en el bundle durante `next build`, así que deben
+# existir como ENV en ESTE punto. Easypanel las inyecta como --build-arg; aquí las
+# declaramos (ARG) y las promovemos a ENV para que `npm run build` las vea.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_ODOO_LIVECHAT_URL
+ARG NEXT_PUBLIC_ODOO_LIVECHAT_CHANNEL
+ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
+    NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_ODOO_LIVECHAT_URL=$NEXT_PUBLIC_ODOO_LIVECHAT_URL \
+    NEXT_PUBLIC_ODOO_LIVECHAT_CHANNEL=$NEXT_PUBLIC_ODOO_LIVECHAT_CHANNEL
+
 RUN npm run build
 
 FROM node:22-slim AS run
