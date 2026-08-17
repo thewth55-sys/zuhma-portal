@@ -7,6 +7,8 @@ import { Topbar } from "./Topbar";
 import { LiveChat } from "./LiveChat";
 import { SectionPlaceholder } from "./SectionPlaceholder";
 import { LeadsView } from "./LeadsView";
+import { ClientesAdmin } from "./ClientesAdmin";
+import { setImpersonation } from "@/lib/api";
 
 export type SessionUser = {
   email: string;
@@ -28,8 +30,22 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
   const canSwitch = user.role === "admin" || user.role === "zuhma_member";
   const [mode, setMode] = useState<"cliente" | "admin">("cliente");
   const [route, setRoute] = useState("inicio");
+  const [impersonating, setImpersonatingState] = useState<{ id: number; name: string } | null>(null);
 
   const name = user.full_name || user.email;
+
+  function startImpersonate(id: number, tenantName: string) {
+    setImpersonation(id);
+    setImpersonatingState({ id, name: tenantName });
+    setMode("cliente");
+    setRoute("leads");
+  }
+  function stopImpersonate() {
+    setImpersonation(null);
+    setImpersonatingState(null);
+    setMode("admin");
+    setRoute("clientes");
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -47,13 +63,20 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         <Topbar
           mode={mode}
           canSwitch={canSwitch}
+          impersonating={impersonating?.name ?? null}
+          onStopImpersonate={stopImpersonate}
           onMode={(m) => {
-            setMode(m);
-            setRoute(m === "cliente" ? "inicio" : "dash");
+            if (m === "admin" && impersonating) stopImpersonate();
+            else {
+              setMode(m);
+              setRoute(m === "cliente" ? "inicio" : "dash");
+            }
           }}
         />
         {mode === "cliente" && route === "leads" ? (
-          <LeadsView canEdit={canSwitch} />
+          <LeadsView canEdit={canSwitch && !impersonating} />
+        ) : mode === "admin" && route === "clientes" ? (
+          <ClientesAdmin onImpersonate={startImpersonate} />
         ) : (
           <SectionPlaceholder route={route} mode={mode} />
         )}

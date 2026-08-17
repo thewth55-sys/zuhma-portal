@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     supabase_jwt_issuer: str = ""
     supabase_jwt_aud: str = "authenticated"
     supabase_jwt_secret: str = ""  # solo si usas HS256 legacy
+    # Service role: SOLO backend, para invitar/crear usuarios vía la Admin API de Supabase.
+    supabase_service_role_key: str = ""
 
     # --- Lead Hub ---
     leadhub_mode: str = "stub"  # stub | live

@@ -15,13 +15,15 @@
 | `SUPABASE_URL` | `https://XXXX.supabase.co` |
 | `SUPABASE_JWT_ISSUER` | `https://XXXX.supabase.co/auth/v1` |
 | `SUPABASE_JWT_AUD` | `authenticated` |
+| `SUPABASE_SERVICE_ROLE_KEY` | service_role de Supabase (**secreto**, solo backend) — para invitar usuarios desde el panel admin |
 | `CORS_ALLOW_ORIGINS` | Dominio del frontend, p. ej. `https://portal.zuhma.online` |
 | `ZUHMA_ADMIN_EMAILS` | Emails con rol admin, coma-separados (p. ej. `oswaldo@zuhma.online`) |
 | `LEADHUB_MODE` | `stub` (cambia a `live` cuando exista el Lead Hub) |
 | `APP_ENV` | `production` |
 | `LOG_LEVEL` | `INFO` |
 
-> No hace falta `SUPABASE_JWT_SECRET` (usamos JWKS RS256) ni el `service_role` de Supabase.
+> No hace falta `SUPABASE_JWT_SECRET` (usamos JWKS). El `service_role` **sí** se usa ahora
+> (solo backend) para invitar usuarios desde el panel admin.
 
 ## Servicio `frontend` (Next.js)
 

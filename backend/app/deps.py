@@ -110,6 +110,13 @@ def get_current_tenant(
     return tenant
 
 
+def require_admin(user: AppUser = Depends(get_current_user)) -> AppUser:
+    """Solo administradores. Gestión de clientes, servicios e invitaciones."""
+    if user.role != UserRole.admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Requiere rol de administrador.")
+    return user
+
+
 def require_editor(user: AppUser = Depends(get_current_user)) -> AppUser:
     """Solo el equipo Zuhma (admin/zuhma_member) puede crear o editar registros.
     El cliente puede calificar y comentar, pero no crear ni modificar datos del lead."""
