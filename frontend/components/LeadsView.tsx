@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Icon } from "./Icon";
+import { LeadDetail } from "./LeadDetail";
 import { api } from "@/lib/api";
 import type { IconName } from "@/lib/nav";
 
@@ -85,6 +86,7 @@ export function LeadsView() {
   const [data, setData] = useState<ListResp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [form, setForm] = useState({ contact_name: "", channel: "Meta Ads", phone: "" });
 
   const load = useCallback(async (status: string) => {
@@ -147,6 +149,10 @@ export function LeadsView() {
   }
 
   const counts = data?.counts ?? {};
+
+  if (openId) {
+    return <LeadDetail leadId={openId} onBack={() => { setOpenId(null); load(tab); }} />;
+  }
 
   return (
     <div className="px-[30px] pt-[26px] pb-[60px] max-w-[1180px]">
@@ -265,6 +271,7 @@ export function LeadsView() {
                 <div className="w-full text-center rounded-[10px] p-2 font-extrabold text-[15px] leading-none" style={{ background: bd.bg, color: bd.c }}>
                   {bd.label}<small className="block text-[10px] font-bold uppercase mt-[3px] opacity-80">Propensidad {l.affinity ?? "—"}/18</small>
                 </div>
+                <button onClick={() => setOpenId(l.id)} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--bg)" }}>Ver detalle →</button>
                 <button onClick={() => act(l, "potential", "Marcado como Potencial ✓")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={{ background: "var(--good,#1baf7a)" }}>✓ Potencial</button>
                 <button onClick={() => act(l, "discarded", "Marcado como No potencial")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>✕ No potencial</button>
                 <button onClick={() => act(l, "waiting", "Movido a En espera")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>⏳ En espera</button>
