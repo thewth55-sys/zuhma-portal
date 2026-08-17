@@ -58,9 +58,30 @@ class StubLeadHub(LeadHub):
     def set_lead_status(self, tenant_partner_id: int, lead_id: str, status: str) -> Lead:
         for lead in _LEADS:
             if lead["id"] == lead_id:
-                # En el stub no persistimos; devolvemos la pieza con el nuevo estado.
-                return {**lead, "status": status}
+                # El stub SÍ persiste en memoria (vive lo que dure el proceso) para que
+                # las pestañas y KPIs reflejen los cambios durante la sesión.
+                lead["status"] = status
+                if status != "pending":
+                    lead["overdue"] = False
+                return dict(lead)
         raise KeyError(lead_id)
+
+    def add_lead(self, tenant_partner_id: int, name: str, channel: str, contact: str) -> Lead:
+        kind = "mail" if "@" in contact else "phone"
+        lead: Lead = {
+            "id": f"LZ-MANUAL-{len(_LEADS) + 1:03d}",
+            "name": name,
+            "affinity": 70,
+            "channel": channel or "Orgánico",
+            "status": "pending",
+            "owner": "Sin dueño",
+            "minutes_in_inbox": 0,
+            "overdue": False,
+            "description": "Alta manual desde el portal.",
+            "contacts": [{"kind": kind, "value": contact}] if contact else [],
+        }
+        _LEADS.append(lead)
+        return dict(lead)
 
     def attribution_kpis(self, tenant_partner_id: int) -> AttributionKpis:
         return {

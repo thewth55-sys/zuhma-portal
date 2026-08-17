@@ -91,6 +91,15 @@ def get_current_tenant(
         return tenant
 
     if user.tenant_id is None:
+        # Interino (hasta el selector de cliente de Fase 4): un admin/miembro Zuhma sin
+        # tenant asignado ve por defecto el primer cliente activo, para poder operar el
+        # portal ya. Un 'client' sin tenant sí queda bloqueado.
+        if user.role in (UserRole.admin, UserRole.zuhma_member):
+            first = db.scalars(
+                select(Tenant).where(Tenant.is_active.is_(True)).order_by(Tenant.id)
+            ).first()
+            if first is not None:
+                return first
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Tu usuario no está asociado a ningún cliente. Contacta a Zuhma.",

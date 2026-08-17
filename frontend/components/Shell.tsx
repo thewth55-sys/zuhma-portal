@@ -6,6 +6,7 @@ import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { LiveChat } from "./LiveChat";
 import { SectionPlaceholder } from "./SectionPlaceholder";
+import { LeadsView } from "./LeadsView";
 
 export type SessionUser = {
   email: string;
@@ -51,7 +52,11 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
             setRoute(m === "cliente" ? "inicio" : "dash");
           }}
         />
-        <SectionPlaceholder route={route} mode={mode} />
+        {mode === "cliente" && route === "leads" ? (
+          <LeadsView />
+        ) : (
+          <SectionPlaceholder route={route} mode={mode} />
+        )}
       </div>
       <LiveChat />
     </div>

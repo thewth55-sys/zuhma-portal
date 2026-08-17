@@ -46,6 +46,9 @@ export const ICONS = {
   inbox: '<path d="M3 12l3-7h12l3 7v7H3z"/><path d="M3 12h5l1.5 2.5h5L21 12"/>',
   chat: '<path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4V6a1 1 0 0 1 1-1z"/><path d="M8 10h8M8 13h5"/>',
   send: '<path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+  phone: '<path d="M4 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L16 12.5l5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 2 5a2 2 0 0 1 2-1z"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;
