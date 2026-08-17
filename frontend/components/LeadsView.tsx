@@ -10,7 +10,8 @@ type Contact = { kind: string; value: string };
 type Lead = {
   id: string;
   name: string;
-  affinity: number;
+  affinity: number | null; // propensidad 0–18
+  band: string | null; // alta | media | baja
   channel: string;
   status: string;
   owner: string;
@@ -34,8 +35,12 @@ function initials(name: string) {
   const p = name.trim().split(/\s+/);
   return ((p[0]?.[0] ?? "") + (p[1]?.[0] ?? "")).toUpperCase() || "·";
 }
-function scoreCls(s: number) {
-  return s >= 80 ? { bg: "#e7f7f0", c: "#0f7a54" } : s >= 60 ? { bg: "#fdf3dd", c: "#8a6b16" } : { bg: "#fde8e7", c: "#b23a3a" };
+function bandCls(band: string | null) {
+  return band === "alta"
+    ? { bg: "#e7f7f0", c: "#0f7a54", label: "Alta" }
+    : band === "media"
+    ? { bg: "#fdf3dd", c: "#8a6b16", label: "Media" }
+    : { bg: "#fde8e7", c: "#b23a3a", label: "Baja" };
 }
 function channelCls(ch: string): { bg: string; c: string } {
   const m: Record<string, { bg: string; c: string }> = {
@@ -80,7 +85,7 @@ export function LeadsView() {
   const [data, setData] = useState<ListResp | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ name: "", channel: "Meta Ads", contact: "" });
+  const [form, setForm] = useState({ contact_name: "", channel: "Meta Ads", phone: "" });
 
   const load = useCallback(async (status: string) => {
     setError(null);
@@ -112,10 +117,10 @@ export function LeadsView() {
 
   async function submitAdd(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    if (!form.contact_name.trim()) return;
     try {
       await api("/leads", { method: "POST", body: JSON.stringify(form) });
-      setForm({ name: "", channel: "Meta Ads", contact: "" });
+      setForm({ contact_name: "", channel: "Meta Ads", phone: "" });
       setAdding(false);
       toast("Prospecto agregado ✓");
       await load(tab);
@@ -169,7 +174,7 @@ export function LeadsView() {
         <form onSubmit={submitAdd} className="mt-4 rounded-card p-4 flex flex-wrap gap-3 items-end" style={{ background: "var(--surface)", border: "1px solid var(--line)" }}>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>Nombre</label>
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={{ border: "1px solid var(--line)" }} placeholder="Nombre del prospecto" />
+            <input required value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={{ border: "1px solid var(--line)" }} placeholder="Nombre del contacto" />
           </div>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>Canal</label>
@@ -181,8 +186,8 @@ export function LeadsView() {
             </select>
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>Contacto</label>
-            <input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={{ border: "1px solid var(--line)" }} placeholder="Teléfono o correo" />
+            <label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>Teléfono</label>
+            <input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={{ border: "1px solid var(--line)" }} placeholder="Teléfono de contacto" />
           </div>
           <button type="submit" className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white" style={{ background: "var(--accent)" }}>Guardar</button>
         </form>
@@ -221,7 +226,7 @@ export function LeadsView() {
 
       {!error &&
         data?.leads.map((l) => {
-          const sc = scoreCls(l.affinity);
+          const bd = bandCls(l.band);
           const ch = channelCls(l.channel);
           return (
             <div key={l.id} className="flex gap-[14px] rounded-[14px] p-[15px] mb-3" style={{ background: l.overdue ? "#fffaf9" : "var(--surface)", border: `1px solid ${l.overdue ? "#f6c9c2" : "var(--line)"}`, boxShadow: "0 1px 2px rgba(20,18,40,.04)" }}>
@@ -257,8 +262,8 @@ export function LeadsView() {
                 </div>
               </div>
               <div className="w-[186px] flex-none flex flex-col gap-[7px] items-end">
-                <div className="w-full text-center rounded-[10px] p-2 font-extrabold text-[15px] leading-none" style={{ background: sc.bg, color: sc.c }}>
-                  {l.affinity}%<small className="block text-[10px] font-bold uppercase mt-[3px] opacity-80">Afinidad</small>
+                <div className="w-full text-center rounded-[10px] p-2 font-extrabold text-[15px] leading-none" style={{ background: bd.bg, color: bd.c }}>
+                  {bd.label}<small className="block text-[10px] font-bold uppercase mt-[3px] opacity-80">Propensidad {l.affinity ?? "—"}/18</small>
                 </div>
                 <button onClick={() => act(l, "potential", "Marcado como Potencial ✓")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={{ background: "var(--good,#1baf7a)" }}>✓ Potencial</button>
                 <button onClick={() => act(l, "discarded", "Marcado como No potencial")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>✕ No potencial</button>

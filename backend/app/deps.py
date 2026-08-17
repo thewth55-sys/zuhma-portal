@@ -114,3 +114,13 @@ def get_tenant_repo(tenant: Tenant = Depends(get_current_tenant)) -> TenantOdooR
     """Repositorio Odoo YA acotado al partner del tenant. Úsalo en los routers en vez
     de tocar OdooClient directo — así el aislamiento es imposible de saltar."""
     return TenantOdooRepository(get_odoo(), tenant.odoo_partner_id)
+
+
+def get_lead_repo(
+    tenant: Tenant = Depends(get_current_tenant),
+    db: Session = Depends(get_db),
+) -> "LeadRepository":
+    """Repositorio del Lead Hub (Postgres) acotado al tenant activo."""
+    from app.leadhub.repository import LeadRepository
+
+    return LeadRepository(db, tenant)

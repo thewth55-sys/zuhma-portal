@@ -1,8 +1,8 @@
-"""Bandeja de leads — sobre el Zuhma Lead Hub (hoy stub).
+"""Bandeja de leads y detalle del lead — Lead Hub persistente (Postgres).
 
-Todo se acota por el tenant activo (get_current_tenant). El Lead Hub es multi-tenant
-nativo: cada método recibe el partner del tenant. Con el stub los datos son de muestra
-(iguales para todo tenant); al conectar el Lead Hub real, esta capa no cambia.
+Todo se acota por el tenant activo (get_lead_repo → LeadRepository). El cuestionario y
+el scoring son configurables por cliente (GET /leads/config). Al calificar un lead se
+genera el evento de conversión (en cola hasta que el motor CAPI/Google tenga credenciales).
 """
 
 from __future__ import annotations
@@ -10,13 +10,11 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.deps import get_current_tenant
-from app.leadhub import get_leadhub
-from app.models import Tenant
+from app.deps import get_lead_repo
+from app.leadhub.repository import LeadRepository
 
 router = APIRouter(prefix="/leads", tags=["leads"])
 
-# Estados válidos y a qué acción del prototipo corresponden.
 _VALID_STATUS = {"pending", "waiting", "potential", "discarded"}
 
 
@@ -24,42 +22,89 @@ class StatusIn(BaseModel):
     status: str
 
 
-class NewLeadIn(BaseModel):
-    name: str
+class LeadIn(BaseModel):
+    contact_name: str
+    cargo: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    company_name: str | None = None
+    company_size: str | None = None
+    website: str | None = None
     channel: str | None = None
-    contact: str | None = None
+    owner: str | None = None
+    description: str | None = None
+    answers: dict = {}
+    # atribución (normalmente la rellena el snippet/webhook; editable en alta manual)
+    gclid: str | None = None
+    fbclid: str | None = None
+    fbc: str | None = None
+    fbp: str | None = None
+    utm_source: str | None = None
+    utm_medium: str | None = None
+    utm_campaign: str | None = None
+
+
+class LeadPatch(BaseModel):
+    contact_name: str | None = None
+    cargo: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    company_name: str | None = None
+    company_size: str | None = None
+    website: str | None = None
+    channel: str | None = None
+    owner: str | None = None
+    description: str | None = None
+    answers: dict | None = None
+
+
+@router.get("/config")
+def config(repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+    """Cuestionario + reglas de scoring del cliente (para renderizar el formulario)."""
+    return repo.get_config()
 
 
 @router.get("/kpis")
-def kpis(tenant: Tenant = Depends(get_current_tenant)) -> dict:
-    return get_leadhub().lead_kpis(tenant.odoo_partner_id)
+def kpis(repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+    return repo.kpis()
 
 
 @router.get("")
-def list_leads(status_filter: str | None = None, tenant: Tenant = Depends(get_current_tenant)) -> dict:
-    """Lista de leads. `status_filter` opcional: pending|waiting|potential|discarded|all."""
-    leads = get_leadhub().list_leads(tenant.odoo_partner_id, status_filter)
-    # Conteo por estado para las pestañas (siempre sobre el total, sin filtrar).
-    allof = get_leadhub().list_leads(tenant.odoo_partner_id, "all")
-    counts = {s: sum(1 for lead in allof if lead["status"] == s) for s in _VALID_STATUS}
-    counts["all"] = len(allof)
-    return {"leads": leads, "counts": counts}
+def list_leads(status_filter: str | None = None, repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+    return repo.list_leads(status_filter)
 
 
-@router.post("/{lead_id}/status")
-def set_status(lead_id: str, body: StatusIn, tenant: Tenant = Depends(get_current_tenant)) -> dict:
-    if body.status not in _VALID_STATUS:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
-    try:
-        return get_leadhub().set_lead_status(tenant.odoo_partner_id, lead_id, body.status)
-    except KeyError:
+@router.get("/{lead_id}")
+def get_lead(lead_id: str, repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+    detail = repo.get(lead_id)
+    if detail is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return detail
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def add_lead(body: NewLeadIn, tenant: Tenant = Depends(get_current_tenant)) -> dict:
-    if not body.name.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El nombre es obligatorio.")
-    return get_leadhub().add_lead(
-        tenant.odoo_partner_id, body.name.strip(), body.channel or "", body.contact or ""
-    )
+def create_lead(body: LeadIn, repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+    if not body.contact_name.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El nombre del contacto es obligatorio.")
+    return repo.create(body.model_dump())
+
+
+@router.patch("/{lead_id}")
+def update_lead(lead_id: str, body: LeadPatch, repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+    updated = repo.update(lead_id, body.model_dump(exclude_none=True))
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return updated
+
+
+@router.post("/{lead_id}/status")
+def set_status(lead_id: str, body: StatusIn, repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+    if body.status not in _VALID_STATUS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
+    try:
+        updated = repo.set_status(lead_id, body.status)
+    except KeyError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return updated
