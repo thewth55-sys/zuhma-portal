@@ -175,6 +175,14 @@ class LeadRepository:
         self.db.commit()
         return self.get(lead_id)
 
+    def add_comment(self, lead_id: str, text: str, author: str) -> dict | None:
+        lead = self.db.scalar(select(Lead).where(Lead.tenant_id == self.tenant.id, Lead.lead_id == lead_id))
+        if lead is None:
+            return None
+        lead.activities.append(LeadActivity(kind="comment", text=f"{author}: {text}"))
+        self.db.commit()
+        return self.get(lead_id)
+
     def set_status(self, lead_id: str, status: str) -> dict | None:
         try:
             new = LeadStatus(status)

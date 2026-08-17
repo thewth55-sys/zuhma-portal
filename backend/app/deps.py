@@ -110,6 +110,17 @@ def get_current_tenant(
     return tenant
 
 
+def require_editor(user: AppUser = Depends(get_current_user)) -> AppUser:
+    """Solo el equipo Zuhma (admin/zuhma_member) puede crear o editar registros.
+    El cliente puede calificar y comentar, pero no crear ni modificar datos del lead."""
+    if user.role not in (UserRole.admin, UserRole.zuhma_member):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Solo el equipo Zuhma puede crear o editar registros. Como cliente puedes calificar y comentar.",
+        )
+    return user
+
+
 def get_tenant_repo(tenant: Tenant = Depends(get_current_tenant)) -> TenantOdooRepository:
     """Repositorio Odoo YA acotado al partner del tenant. Úsalo en los routers en vez
     de tocar OdooClient directo — así el aislamiento es imposible de saltar."""

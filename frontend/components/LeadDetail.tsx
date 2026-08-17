@@ -72,12 +72,13 @@ function Card({ title, tag, children }: { title: string; tag?: string; children:
   );
 }
 
-export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => void }) {
+export function LeadDetail({ leadId, canEdit, onBack }: { leadId: string; canEdit: boolean; onBack: () => void }) {
   const [tab, setTab] = useState("resumen");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
+  const [comment, setComment] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -105,6 +106,18 @@ export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => v
       toast("No se pudo guardar");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function sendComment() {
+    if (!comment.trim()) return;
+    try {
+      const d = await api<Detail>(`/leads/${encodeURIComponent(leadId)}/comment`, { method: "POST", body: JSON.stringify({ text: comment.trim() }) });
+      setDetail(d);
+      setComment("");
+      toast("Comentario agregado ✓");
+    } catch {
+      toast("No se pudo comentar");
     }
   }
 
@@ -191,10 +204,14 @@ export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => v
           {config.questions.map((q) => (
             <div key={q.key} className="flex items-center justify-between gap-4 py-[10px]" style={{ borderTop: "1px solid var(--line)" }}>
               <div className="text-[13.5px]">{q.label} <span style={{ color: "var(--faint)" }}>(máx {q.weight})</span></div>
-              <select value={(answers[q.key] as string) ?? ""} onChange={(e) => setAns(q.key, e.target.value)} className="px-3 py-2 rounded-[10px] text-[13px] outline-none min-w-[200px]" style={{ border: "1px solid var(--line)" }}>
-                <option value="">—</option>
-                {q.options?.map((o) => <option key={o.value} value={o.value}>{o.label} ({o.points})</option>)}
-              </select>
+              {canEdit ? (
+                <select value={(answers[q.key] as string) ?? ""} onChange={(e) => setAns(q.key, e.target.value)} className="px-3 py-2 rounded-[10px] text-[13px] outline-none min-w-[200px]" style={{ border: "1px solid var(--line)" }}>
+                  <option value="">—</option>
+                  {q.options?.map((o) => <option key={o.value} value={o.value}>{o.label} ({o.points})</option>)}
+                </select>
+              ) : (
+                <span className="text-[13.5px] font-semibold">{optLabel(q, answers[q.key])}</span>
+              )}
             </div>
           ))}
           {config.penalties.map((p) => (
@@ -203,10 +220,12 @@ export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => v
               <div className="flex gap-4 flex-wrap">
                 {p.options?.map((o) => {
                   const on = Array.isArray(answers[p.key]) && (answers[p.key] as string[]).includes(o.value);
-                  return (
+                  return canEdit ? (
                     <label key={o.value} className="flex items-center gap-2 text-[13px] cursor-pointer">
                       <input type="checkbox" checked={!!on} onChange={() => togglePenalty(p.key, o.value)} /> {o.label} ({o.points})
                     </label>
+                  ) : (
+                    <span key={o.value} className="text-[13px]" style={{ opacity: on ? 1 : 0.4 }}>{on ? "☑" : "☐"} {o.label} ({o.points})</span>
                   );
                 })}
               </div>
@@ -216,9 +235,13 @@ export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => v
             <div className="text-[13px]" style={{ color: "var(--muted)" }}>
               Propensidad actual: <b style={{ color: "var(--ink)" }}>{detail.propensity_score}/{config.max_score ?? 18}</b> ({bandCls(detail.propensity_band).label})
             </div>
-            <button onClick={save} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white disabled:opacity-60" style={{ background: "var(--accent)" }}>
-              {saving ? "Guardando…" : "Guardar y recalcular"}
-            </button>
+            {canEdit ? (
+              <button onClick={save} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white disabled:opacity-60" style={{ background: "var(--accent)" }}>
+                {saving ? "Guardando…" : "Guardar y recalcular"}
+              </button>
+            ) : (
+              <span className="text-[12px]" style={{ color: "var(--faint)" }}>Solo el equipo Zuhma edita la calificación</span>
+            )}
           </div>
         </Card>
       )}
@@ -228,7 +251,11 @@ export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => v
           {config.info_fields.map((f) => (
             <div key={f.key} className="flex items-center justify-between gap-4 py-[10px]" style={{ borderTop: "1px solid var(--line)" }}>
               <div className="text-[13.5px]">{f.label}</div>
-              {f.type === "boolean" ? (
+              {!canEdit ? (
+                <span className="text-[13.5px] font-semibold">
+                  {f.type === "boolean" ? (answers[f.key] ? "Sí" : "No") : f.type === "select" ? optLabel(f, answers[f.key]) : ((answers[f.key] as string) || "—")}
+                </span>
+              ) : f.type === "boolean" ? (
                 <input type="checkbox" checked={!!answers[f.key]} onChange={(e) => setAns(f.key, e.target.checked)} />
               ) : f.type === "select" ? (
                 <select value={(answers[f.key] as string) ?? ""} onChange={(e) => setAns(f.key, e.target.value)} className="px-3 py-2 rounded-[10px] text-[13px] outline-none min-w-[200px]" style={{ border: "1px solid var(--line)" }}>
@@ -241,9 +268,11 @@ export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => v
             </div>
           ))}
           <Row k="Fecha de sesión" v={detail.session_date} />
-          <div className="flex justify-end mt-4">
-            <button onClick={save} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white disabled:opacity-60" style={{ background: "var(--accent)" }}>{saving ? "Guardando…" : "Guardar"}</button>
-          </div>
+          {canEdit && (
+            <div className="flex justify-end mt-4">
+              <button onClick={save} disabled={saving} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white disabled:opacity-60" style={{ background: "var(--accent)" }}>{saving ? "Guardando…" : "Guardar"}</button>
+            </div>
+          )}
         </Card>
       )}
 
@@ -288,6 +317,10 @@ export function LeadDetail({ leadId, onBack }: { leadId: string; onBack: () => v
 
       {tab === "actividad" && (
         <Card title="Actividad">
+          <div className="flex gap-2 mb-4">
+            <input value={comment} onChange={(e) => setComment(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") sendComment(); }} placeholder="Escribe un comentario…" className="flex-1 px-3 py-2 rounded-[10px] text-[13px] outline-none" style={{ border: "1px solid var(--line)" }} />
+            <button onClick={sendComment} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white" style={{ background: "var(--accent)" }}>Comentar</button>
+          </div>
           {detail.activity.length === 0 ? <div style={{ color: "var(--muted)" }}>Sin actividad.</div> : detail.activity.map((a, i) => (
             <div key={i} className="flex gap-3 py-[11px]" style={{ borderTop: i ? "1px solid var(--line)" : "none" }}>
               <div className="w-8 h-8 rounded-[9px] grid place-items-center flex-none" style={{ background: "var(--accent-soft)", color: "var(--accent)" }}><Icon name="bolt" className="zi" /></div>

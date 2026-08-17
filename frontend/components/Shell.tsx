@@ -53,7 +53,7 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
           }}
         />
         {mode === "cliente" && route === "leads" ? (
-          <LeadsView />
+          <LeadsView canEdit={canSwitch} />
         ) : (
           <SectionPlaceholder route={route} mode={mode} />
         )}

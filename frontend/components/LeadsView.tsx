@@ -80,7 +80,7 @@ function Kpi({ icon, val, lbl, delta }: { icon: IconName; val: string; lbl: stri
   );
 }
 
-export function LeadsView() {
+export function LeadsView({ canEdit }: { canEdit: boolean }) {
   const [tab, setTab] = useState("pending");
   const [kpis, setKpis] = useState<Kpis | null>(null);
   const [data, setData] = useState<ListResp | null>(null);
@@ -151,7 +151,7 @@ export function LeadsView() {
   const counts = data?.counts ?? {};
 
   if (openId) {
-    return <LeadDetail leadId={openId} onBack={() => { setOpenId(null); load(tab); }} />;
+    return <LeadDetail leadId={openId} canEdit={canEdit} onBack={() => { setOpenId(null); load(tab); }} />;
   }
 
   return (
@@ -170,13 +170,15 @@ export function LeadsView() {
           <button onClick={exportCsv} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>
             ⤓ Exportar CSV
           </button>
-          <button onClick={() => setAdding((v) => !v)} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={{ background: "var(--accent)" }}>
-            + Agregar prospecto
-          </button>
+          {canEdit && (
+            <button onClick={() => setAdding((v) => !v)} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={{ background: "var(--accent)" }}>
+              + Agregar prospecto
+            </button>
+          )}
         </div>
       </div>
 
-      {adding && (
+      {canEdit && adding && (
         <form onSubmit={submitAdd} className="mt-4 rounded-card p-4 flex flex-wrap gap-3 items-end" style={{ background: "var(--surface)", border: "1px solid var(--line)" }}>
           <div className="flex flex-col gap-1">
             <label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>Nombre</label>
