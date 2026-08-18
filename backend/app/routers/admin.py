@@ -21,10 +21,11 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.deps import require_admin
+from app.deps import allowed_client_ids, require_internal, require_permission
 from app.integrations import meta as meta_api
 from app.leadhub.repository import LeadRepository
 from app.models import (
+    ALL_PERMISSIONS,
     AppUser,
     ConversionConfig,
     EventStatus,
@@ -42,7 +43,11 @@ from app.odoo.repositories import TenantOdooRepository
 from app.routers.leads import CommentIn, LeadIn, LeadPatch, StatusIn
 from app.security.supabase_admin import SupabaseAdminError, invite_user
 
-router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_internal)])
+
+# Dependencias de permiso reutilizables (el rol admin las cumple todas).
+_clients_perm = Depends(require_permission("manage_clients"))
+_leads_perm = Depends(require_permission("manage_leads"))
 
 
 def _slugify(name: str) -> str:
@@ -103,9 +108,13 @@ def email_test(body: EmailTestIn) -> dict:
 
 
 @router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db)) -> dict:
-    """Vista general del negocio para el admin (datos de la base propia)."""
-    tenants = db.scalars(select(Tenant).order_by(Tenant.name)).all()
+def dashboard(user: AppUser = Depends(require_internal), db: Session = Depends(get_db)) -> dict:
+    """Vista general del negocio (acotado a los clientes que el usuario puede ver)."""
+    stmt = select(Tenant).order_by(Tenant.name)
+    allowed = allowed_client_ids(user)
+    if allowed is not None:
+        stmt = stmt.where(Tenant.id.in_(allowed or [0]))
+    tenants = db.scalars(stmt).all()
     clients_active = sum(1 for t in tenants if t.is_active)
 
     def count(*where) -> int:
@@ -156,13 +165,16 @@ def dashboard(db: Session = Depends(get_db)) -> dict:
 
 
 @router.get("/clients")
-def list_clients(db: Session = Depends(get_db)) -> list[dict]:
-    tenants = db.scalars(select(Tenant).order_by(Tenant.name)).all()
-    return [_client_dict(db, t) for t in tenants]
+def list_clients(user: AppUser = Depends(require_internal), db: Session = Depends(get_db)) -> list[dict]:
+    stmt = select(Tenant).order_by(Tenant.name)
+    allowed = allowed_client_ids(user)
+    if allowed is not None:
+        stmt = stmt.where(Tenant.id.in_(allowed or [0]))
+    return [_client_dict(db, t) for t in db.scalars(stmt).all()]
 
 
 @router.post("/clients", status_code=status.HTTP_201_CREATED)
-def create_client(body: ClientIn, db: Session = Depends(get_db)) -> dict:
+def create_client(body: ClientIn, db: Session = Depends(get_db), _: AppUser = Depends(require_permission("manage_clients"))) -> dict:
     if not body.name.strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El nombre es obligatorio.")
     slug = _slugify(body.name)
@@ -185,7 +197,7 @@ def create_client(body: ClientIn, db: Session = Depends(get_db)) -> dict:
 
 
 @router.patch("/clients/{client_id}")
-def update_client(client_id: int, body: ClientPatch, db: Session = Depends(get_db)) -> dict:
+def update_client(client_id: int, body: ClientPatch, db: Session = Depends(get_db), _: AppUser = Depends(require_permission("manage_clients"))) -> dict:
     tenant = db.get(Tenant, client_id)
     if tenant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
@@ -235,6 +247,111 @@ def client_odoo_tasks(client_id: int, db: Session = Depends(get_db)) -> list[dic
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
 
 
+# ---------------- Equipo interno (require manage_team) ---------------- #
+
+_team_perm = Depends(require_permission("manage_team"))
+
+
+class TeamInviteIn(BaseModel):
+    email: str
+    full_name: str | None = None
+    role: str = "zuhma_member"       # zuhma_member | admin
+    permissions: list[str] = []
+    managed_client_ids: list[int] | None = None  # null = todos
+
+
+class TeamPatchIn(BaseModel):
+    role: str | None = None
+    permissions: list[str] | None = None
+    managed_client_ids: list[int] | None = None
+    active: bool | None = None
+
+
+def _member_dict(u: AppUser) -> dict:
+    return {
+        "id": u.id, "email": u.email, "full_name": u.full_name, "role": u.role.value,
+        "active": u.active, "permissions": u.effective_permissions,
+        "managed_client_ids": u.managed_client_ids,
+    }
+
+
+@router.get("/team/permissions")
+def team_permissions(_: AppUser = _team_perm) -> dict:
+    return {"permissions": ALL_PERMISSIONS}
+
+
+@router.get("/team/clients")
+def team_clients(db: Session = Depends(get_db), _: AppUser = _team_perm) -> list[dict]:
+    """Lista simple de clientes para asignar (id + nombre)."""
+    return [{"id": t.id, "name": t.name} for t in db.scalars(select(Tenant).order_by(Tenant.name)).all()]
+
+
+@router.get("/team")
+def list_team(db: Session = Depends(get_db), _: AppUser = _team_perm) -> list[dict]:
+    members = db.scalars(
+        select(AppUser).where(AppUser.role.in_([UserRole.admin, UserRole.zuhma_member])).order_by(AppUser.email)
+    ).all()
+    return [_member_dict(u) for u in members]
+
+
+@router.post("/team/invite", status_code=status.HTTP_201_CREATED)
+def invite_member(body: TeamInviteIn, db: Session = Depends(get_db), _: AppUser = _team_perm) -> dict:
+    email = body.email.strip().lower()
+    if not email:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El correo es obligatorio.")
+    role = UserRole.admin if body.role == "admin" else UserRole.zuhma_member
+
+    existing = db.scalar(select(AppUser).where(AppUser.email == email))
+    if existing:
+        existing.role = role
+        existing.permissions = body.permissions
+        existing.managed_client_ids = body.managed_client_ids
+        existing.active = True
+        existing.tenant_id = None
+        db.commit()
+        return {"status": "updated", "member": _member_dict(existing), "action_link": None, "email_sent": False}
+
+    try:
+        invited = invite_user(email, body.full_name)
+    except SupabaseAdminError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+    user = AppUser(
+        supabase_user_id=invited.user_id, email=email, full_name=body.full_name,
+        role=role, permissions=body.permissions, managed_client_ids=body.managed_client_ids, active=True,
+    )
+    db.add(user)
+    db.commit()
+
+    email_sent = False
+    if invited.action_link:
+        from app.integrations import email as mailer
+
+        subject, html_body = mailer.invite_email("Equipo Zuhma", invited.action_link)
+        email_sent, _detail = mailer.send_email(email, subject, html_body)
+
+    return {"status": "invited", "member": _member_dict(user), "action_link": invited.action_link, "email_sent": email_sent}
+
+
+@router.patch("/team/{member_id}")
+def update_member(member_id: int, body: TeamPatchIn, db: Session = Depends(get_db), actor: AppUser = _team_perm) -> dict:
+    u = db.get(AppUser, member_id)
+    if u is None or u.role == UserRole.client:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado.")
+    if body.role is not None:
+        u.role = UserRole.admin if body.role == "admin" else UserRole.zuhma_member
+    if body.permissions is not None:
+        u.permissions = body.permissions
+    if body.managed_client_ids is not None:
+        u.managed_client_ids = body.managed_client_ids
+    if body.active is not None:
+        if u.id == actor.id and not body.active:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "No puedes desactivarte a ti mismo.")
+        u.active = body.active
+    db.commit()
+    return _member_dict(u)
+
+
 # ---------------- Partners de Odoo (para vincular) ---------------- #
 
 @router.get("/odoo-partners")
@@ -267,7 +384,7 @@ def list_users(client_id: int, db: Session = Depends(get_db)) -> list[dict]:
 
 
 @router.post("/clients/{client_id}/invite", status_code=status.HTTP_201_CREATED)
-def invite(client_id: int, body: InviteIn, db: Session = Depends(get_db)) -> dict:
+def invite(client_id: int, body: InviteIn, db: Session = Depends(get_db), _p: AppUser = _clients_perm) -> dict:
     tenant = db.get(Tenant, client_id)
     if tenant is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
@@ -395,7 +512,7 @@ def admin_get_lead(client_id: int, lead_id: str, db: Session = Depends(get_db)) 
 
 
 @router.post("/clients/{client_id}/leads", status_code=status.HTTP_201_CREATED)
-def admin_create_lead(client_id: int, body: LeadIn, db: Session = Depends(get_db)) -> dict:
+def admin_create_lead(client_id: int, body: LeadIn, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
     if not body.contact_name.strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El nombre del contacto es obligatorio.")
     return _lead_repo(client_id, db).create(body.model_dump())
@@ -410,7 +527,7 @@ def admin_update_lead(client_id: int, lead_id: str, body: LeadPatch, db: Session
 
 
 @router.post("/clients/{client_id}/leads/{lead_id}/status")
-def admin_set_status(client_id: int, lead_id: str, body: StatusIn, db: Session = Depends(get_db)) -> dict:
+def admin_set_status(client_id: int, lead_id: str, body: StatusIn, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
     repo = _lead_repo(client_id, db)
     try:
         updated = repo.set_status(lead_id, body.status)
@@ -436,7 +553,7 @@ def admin_flush_events(client_id: int, lead_id: str, db: Session = Depends(get_d
 
 
 @router.post("/clients/{client_id}/leads/{lead_id}/release")
-def admin_release_lead(client_id: int, lead_id: str, body: ReleaseIn, db: Session = Depends(get_db)) -> dict:
+def admin_release_lead(client_id: int, lead_id: str, body: ReleaseIn, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
     updated = _lead_repo(client_id, db).release(lead_id, body.released)
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
@@ -444,7 +561,7 @@ def admin_release_lead(client_id: int, lead_id: str, body: ReleaseIn, db: Sessio
 
 
 @router.post("/clients/{client_id}/leads/{lead_id}/comment")
-def admin_comment_lead(client_id: int, lead_id: str, body: CommentIn, user: AppUser = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+def admin_comment_lead(client_id: int, lead_id: str, body: CommentIn, user: AppUser = Depends(require_internal), db: Session = Depends(get_db)) -> dict:
     updated = _lead_repo(client_id, db).add_comment(lead_id, body.text.strip(), user.full_name or user.email)
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
@@ -580,7 +697,7 @@ def get_conversion_config(client_id: int, db: Session = Depends(get_db)) -> dict
 
 
 @router.put("/clients/{client_id}/conversion-config")
-def set_conversion_config(client_id: int, body: ConversionIn, db: Session = Depends(get_db)) -> dict:
+def set_conversion_config(client_id: int, body: ConversionIn, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
     if db.get(Tenant, client_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
     c = db.scalar(select(ConversionConfig).where(ConversionConfig.tenant_id == client_id))
@@ -620,7 +737,7 @@ def list_meta_pages(client_id: int, db: Session = Depends(get_db)) -> list[dict]
 
 
 @router.post("/clients/{client_id}/meta-pages", status_code=status.HTTP_201_CREATED)
-def connect_meta_page(client_id: int, body: MetaPageIn, db: Session = Depends(get_db)) -> dict:
+def connect_meta_page(client_id: int, body: MetaPageIn, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
     if db.get(Tenant, client_id) is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
     if db.scalar(select(MetaPage).where(MetaPage.page_id == body.page_id)):

@@ -1,7 +1,7 @@
 "use client";
 
 import { Icon } from "./Icon";
-import { NAV_ADMIN, NAV_CLIENTE, type NavItem } from "@/lib/nav";
+import { ADMIN_PERM, NAV_ADMIN, NAV_CLIENTE, type NavItem } from "@/lib/nav";
 
 type Props = {
   mode: "cliente" | "admin";
@@ -13,17 +13,20 @@ type Props = {
   userName: string;
   onSignOut: () => void;
   enabledModules?: string[] | null;
+  permissions?: string[] | null;
 };
 
-export function Sidebar({ mode, route, onNavigate, tenantName, planLabel, userInitials, userName, onSignOut, enabledModules }: Props) {
+export function Sidebar({ mode, route, onNavigate, tenantName, planLabel, userInitials, userName, onSignOut, enabledModules, permissions }: Props) {
   const isC = mode === "cliente";
-  // En vista cliente, solo mostrar los módulos habilitados (null = todos).
-  const items: NavItem[] =
-    isC && Array.isArray(enabledModules)
+  // Cliente: solo módulos habilitados (null = todos).
+  // Admin: solo secciones cuyo permiso tenga el usuario interno (null en el mapa = libre).
+  const items: NavItem[] = isC
+    ? Array.isArray(enabledModules)
       ? NAV_CLIENTE.filter((it) => enabledModules.includes(it.k))
-      : isC
-      ? NAV_CLIENTE
-      : NAV_ADMIN;
+      : NAV_CLIENTE
+    : Array.isArray(permissions)
+    ? NAV_ADMIN.filter((it) => ADMIN_PERM[it.k] == null || permissions.includes(ADMIN_PERM[it.k] as string))
+    : NAV_ADMIN;
 
   return (
     <aside className="w-[248px] flex-none flex flex-col sticky top-0 h-screen text-white" style={{ background: "var(--brand-ink)" }}>

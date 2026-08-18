@@ -27,6 +27,19 @@ export const NAV_ADMIN: NavItem[] = [
   { k: "config", t: "Configuración", i: "gear" },
 ];
 
+// Permiso requerido por cada sección admin (null = cualquier usuario interno).
+export const ADMIN_PERM: Record<string, string | null> = {
+  dash: null,
+  clientes: "manage_clients",
+  adminleads: "manage_leads",
+  contenido: "upload_content",
+  tareas: "manage_tasks",
+  factadmin: "manage_billing",
+  equipo: "manage_team",
+  activ: null,
+  config: "manage_team",
+};
+
 // Subconjunto de iconos usados por la navegación (paths del prototipo).
 export const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',

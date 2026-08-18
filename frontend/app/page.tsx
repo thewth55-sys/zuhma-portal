@@ -14,6 +14,7 @@ const DEMO_USER: SessionUser = {
   tenantName: "Nextcore Consulting",
   planLabel: "Growth B2B · Activo",
   enabledModules: null,
+  permissions: ["manage_clients", "manage_leads", "upload_content", "manage_tasks", "manage_billing", "manage_team"],
 };
 
 export default function Page() {
@@ -36,9 +37,11 @@ export default function Page() {
     let tenantName = "";
     let planLabel = "";
     let enabledModules: string[] | null = null;
+    let permissions: string[] = [];
     try {
-      const me = await api<{ role: SessionUser["role"] }>("/me");
+      const me = await api<{ role: SessionUser["role"]; permissions: string[] }>("/me");
       role = me.role;
+      permissions = me.permissions ?? [];
       const t = await api<{ name: string; plan: string | null; enabled_modules: string[] | null }>("/me/tenant");
       tenantName = t.name;
       planLabel = t.plan ? `${t.plan} · Activo` : "Activo";
@@ -53,6 +56,7 @@ export default function Page() {
       tenantName: tenantName || data.session.user.email || "Cliente",
       planLabel: planLabel || "Cuenta activa",
       enabledModules,
+      permissions,
     });
     setState("in");
   }, []);

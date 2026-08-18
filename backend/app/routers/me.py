@@ -17,6 +17,7 @@ def me(user: AppUser = Depends(get_current_user)) -> dict:
         "full_name": user.full_name,
         "role": user.role.value,
         "tenant_id": user.tenant_id,
+        "permissions": user.effective_permissions,
     }
 
 

@@ -52,7 +52,34 @@ def get_current_user(
         db.add(user)
         db.commit()
         db.refresh(user)
+    if not user.active:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Tu cuenta está desactivada. Contacta a Zuhma.")
     return user
+
+
+def require_internal(user: AppUser = Depends(get_current_user)) -> AppUser:
+    """Equipo Zuhma (admin o zuhma_member)."""
+    if user.role not in (UserRole.admin, UserRole.zuhma_member):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Solo el equipo Zuhma.")
+    return user
+
+
+def require_permission(perm: str):
+    """Dependencia que exige un permiso (el rol admin los tiene todos)."""
+
+    def _dep(user: AppUser = Depends(require_internal)) -> AppUser:
+        if not user.has_perm(perm):
+            raise HTTPException(status.HTTP_403_FORBIDDEN, f"No tienes el permiso '{perm}'.")
+        return user
+
+    return _dep
+
+
+def allowed_client_ids(user: AppUser) -> list[int] | None:
+    """Clientes que el usuario interno puede ver. None = todos."""
+    if user.role == UserRole.admin or user.managed_client_ids is None:
+        return None
+    return list(user.managed_client_ids)
 
 
 def _log_impersonation(db: Session, admin: AppUser, tenant: Tenant, ip: str | None) -> None:

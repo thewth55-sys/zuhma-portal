@@ -10,6 +10,7 @@ import { LeadsView } from "./LeadsView";
 import { ClientesAdmin } from "./ClientesAdmin";
 import { AdminLeads } from "./AdminLeads";
 import { AdminDashboard } from "./AdminDashboard";
+import { AdminTeam } from "./AdminTeam";
 import { setImpersonation, api } from "@/lib/api";
 
 export type SessionUser = {
@@ -19,6 +20,7 @@ export type SessionUser = {
   tenantName: string;
   planLabel: string;
   enabledModules: string[] | null;
+  permissions: string[];
 };
 
 function initials(nameOrEmail: string): string {
@@ -70,21 +72,10 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         userName={name}
         onSignOut={onSignOut}
         enabledModules={clientModules}
+        permissions={user.permissions}
       />
       <div className="flex-1 min-w-0">
-        <Topbar
-          mode={mode}
-          canSwitch={canSwitch}
-          impersonating={impersonating?.name ?? null}
-          onStopImpersonate={stopImpersonate}
-          onMode={(m) => {
-            if (m === "admin" && impersonating) stopImpersonate();
-            else {
-              setMode(m);
-              setRoute(m === "cliente" ? "inicio" : "dash");
-            }
-          }}
-        />
+        <Topbar impersonating={impersonating?.name ?? null} onStopImpersonate={stopImpersonate} />
         {mode === "cliente" && route === "leads" ? (
           <LeadsView canEdit={canSwitch && !impersonating} />
         ) : mode === "admin" && route === "dash" ? (
@@ -93,6 +84,8 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
           <ClientesAdmin onImpersonate={startImpersonate} />
         ) : mode === "admin" && route === "adminleads" ? (
           <AdminLeads />
+        ) : mode === "admin" && route === "equipo" ? (
+          <AdminTeam />
         ) : (
           <SectionPlaceholder route={route} mode={mode} />
         )}
