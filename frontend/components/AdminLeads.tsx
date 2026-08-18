@@ -170,7 +170,8 @@ function ConversionConfigPanel({ clientId }: { clientId: number }) {
   useEffect(() => { load(); }, [load]);
 
   async function save(payload: object, label: string) {
-    const clean = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== "" && v != null));
+    // El test_event_code SÍ se envía aunque esté vacío (para poder borrarlo → producción).
+    const clean = Object.fromEntries(Object.entries(payload).filter(([k, v]) => k === "meta_test_event_code" || (v !== "" && v != null)));
     try {
       const r = await api<{ flushed?: { sent: number; failed: number } }>(`/admin/clients/${clientId}/conversion-config`, { method: "PUT", body: JSON.stringify(clean) });
       const f = r.flushed;
