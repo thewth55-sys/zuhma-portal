@@ -202,6 +202,17 @@ class LeadRepository:
         self.db.commit()
         return self.get(lead_id)
 
+    def delete(self, lead_id: str) -> bool:
+        lead = self.db.scalar(
+            select(Lead).where(Lead.tenant_id == self.tenant.id, Lead.lead_id == lead_id)
+            .options(selectinload(Lead.events), selectinload(Lead.activities))
+        )
+        if lead is None:
+            return False
+        self.db.delete(lead)  # cascada a eventos y actividad (delete-orphan)
+        self.db.commit()
+        return True
+
     def add_comment(self, lead_id: str, text: str, author: str) -> dict | None:
         lead = self.db.scalar(select(Lead).where(Lead.tenant_id == self.tenant.id, Lead.lead_id == lead_id))
         if lead is None:

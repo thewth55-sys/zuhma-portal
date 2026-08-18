@@ -566,6 +566,14 @@ def admin_set_status(client_id: int, lead_id: str, body: StatusIn, db: Session =
     return repo.get(lead_id, admin_view=True) or updated
 
 
+@router.delete("/clients/{client_id}/leads/{lead_id}")
+def admin_delete_lead(client_id: int, lead_id: str, actor: AppUser = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+    """Elimina un lead (y su historial). Solo administradores."""
+    if not _lead_repo(client_id, db).delete(lead_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return {"ok": True}
+
+
 @router.post("/clients/{client_id}/leads/{lead_id}/flush")
 def admin_flush_events(client_id: int, lead_id: str, db: Session = Depends(get_db)) -> dict:
     """Reintenta enviar los eventos de conversión en cola del lead."""

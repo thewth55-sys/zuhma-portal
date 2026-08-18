@@ -34,7 +34,7 @@ function Card({ title, right, children }: { title: string; right?: React.ReactNo
   );
 }
 
-export function AdminLeads() {
+export function AdminLeads({ isAdmin = false }: { isAdmin?: boolean }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState<number | null>(null);
   const [data, setData] = useState<ListResp | null>(null);
@@ -67,6 +67,12 @@ export function AdminLeads() {
     if (!clientId) return;
     try { await api(`/admin/clients/${clientId}/leads/${encodeURIComponent(id)}/${path}`, { method: "POST", body: JSON.stringify(body) }); toast(msg); load(); }
     catch { toast("No se pudo actualizar"); }
+  }
+  async function delLead(id: string) {
+    if (!clientId) return;
+    if (!confirm("¿Eliminar este lead y su historial? No se puede deshacer.")) return;
+    try { await api(`/admin/clients/${clientId}/leads/${encodeURIComponent(id)}`, { method: "DELETE" }); toast("Lead eliminado"); load(); }
+    catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "No se pudo eliminar"); }
   }
 
   if (openLead && clientId) {
@@ -129,7 +135,10 @@ export function AdminLeads() {
                         : <button onClick={() => act(l.id, "release", { released: true }, "Liberado al cliente ✓")} className="text-[12px] font-semibold px-[9px] py-[4px] rounded-[8px] text-white" style={btnPri}>Liberar</button>}
                     </td>
                   )}
-                  <td className="py-3 text-right" style={{ borderTop: "1px solid var(--line)" }}><button onClick={() => setOpenLead(l.id)} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={input as object}>Ver detalle →</button></td>
+                  <td className="py-3 text-right whitespace-nowrap" style={{ borderTop: "1px solid var(--line)" }}>
+                    {isAdmin && <button onClick={() => delLead(l.id)} className="text-[12.5px] font-semibold mr-2" style={{ color: "var(--bad,#e34948)" }}>Eliminar</button>}
+                    <button onClick={() => setOpenLead(l.id)} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={input as object}>Ver detalle →</button>
+                  </td>
                 </tr>
               );
             })}

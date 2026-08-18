@@ -84,7 +84,7 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         ) : mode === "admin" && route === "clientes" ? (
           <ClientesAdmin onImpersonate={startImpersonate} />
         ) : mode === "admin" && route === "adminleads" ? (
-          <AdminLeads />
+          <AdminLeads isAdmin={user.role === "admin"} />
         ) : mode === "admin" && route === "equipo" ? (
           <AdminTeam isAdmin={user.role === "admin"} />
         ) : (mode === "cliente" && route === "perfil") || (mode === "admin" && route === "miperfil") ? (
