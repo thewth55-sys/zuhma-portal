@@ -138,10 +138,10 @@ export function AdminLeads() {
         </table>
       </Card>
 
+      {showCfg && clientId && <ConfigEditor clientId={clientId} />}
       {clientId && <LeadSources clientId={clientId} />}
       {clientId && <MetaConnect clientId={clientId} />}
       {clientId && <ConversionConfigPanel clientId={clientId} />}
-      {showCfg && clientId && <ConfigEditor clientId={clientId} />}
     </div>
   );
 }
@@ -398,7 +398,11 @@ function ConfigEditor({ clientId }: { clientId: number }) {
   const [q, setQ] = useState({ label: "", weight: 2, options: "Sí:2\nNo:0" });
   const [req, setReq] = useState({ label: "", type: "text" });
 
-  const load = useCallback(() => { api<Config>(`/admin/clients/${clientId}/lead-config`).then(setCfg).catch(() => {}); }, [clientId]);
+  const [err, setErr] = useState<string | null>(null);
+  const load = useCallback(() => {
+    setErr(null);
+    api<Config>(`/admin/clients/${clientId}/lead-config`).then(setCfg).catch((e) => setErr(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "Error cargando la config"));
+  }, [clientId]);
   useEffect(() => { load(); }, [load]);
 
   async function put(next: Config) {
@@ -423,7 +427,13 @@ function ConfigEditor({ clientId }: { clientId: number }) {
   }
   function removeReq(key: string) { if (cfg) put({ ...cfg, info_fields: cfg.info_fields.filter((x) => x.key !== key) }); }
 
-  if (!cfg) return null;
+  if (!cfg) {
+    return (
+      <Card title="Campos de calificación">
+        <div className="text-[13px]" style={{ color: err ? "var(--bad,#e34948)" : "var(--muted)" }}>{err ?? "Cargando campos…"}</div>
+      </Card>
+    );
+  }
   return (
     <Card title={`Campos de calificación · máx ${cfg.max_score ?? 18}`}>
       <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
