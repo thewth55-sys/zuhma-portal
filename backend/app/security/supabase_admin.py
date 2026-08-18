@@ -37,7 +37,11 @@ def invite_user(email: str, full_name: str | None = None) -> InvitedUser:
             "Falta SUPABASE_SERVICE_ROLE_KEY (o SUPABASE_URL) en el backend para invitar usuarios."
         )
     url = f"{s.supabase_url.rstrip('/')}/auth/v1/admin/generate_link"
-    payload = {"type": "invite", "email": email, "data": {"full_name": full_name} if full_name else {}}
+    payload: dict = {"type": "invite", "email": email, "data": {"full_name": full_name} if full_name else {}}
+    # Redirige al portal (no al Site URL por defecto de Supabase). Debe estar en la
+    # allow-list de Redirect URLs del proyecto Supabase.
+    if s.portal_base_url:
+        payload["redirect_to"] = s.portal_base_url.rstrip("/")
     try:
         resp = httpx.post(url, headers=_headers(s.supabase_service_role_key), json=payload, timeout=15.0)
     except httpx.HTTPError as exc:
