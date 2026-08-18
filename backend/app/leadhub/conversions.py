@@ -22,6 +22,19 @@ def _config(db: Session, tenant_id: int) -> ConversionConfig | None:
     return db.scalar(select(ConversionConfig).where(ConversionConfig.tenant_id == tenant_id))
 
 
+def flush_tenant_queued(db: Session, tenant: Tenant, limit: int = 300) -> dict:
+    """Reintenta los eventos pendientes de los leads del cliente (al configurar credenciales)."""
+    lead_ids = db.scalars(
+        select(Lead.lead_id).where(Lead.tenant_id == tenant.id).order_by(Lead.created_at.desc()).limit(limit)
+    ).all()
+    total = {"sent": 0, "failed": 0, "skipped": 0}
+    for lid in lead_ids:
+        r = flush_lead(db, tenant, lid)
+        for k in total:
+            total[k] += r[k]
+    return total
+
+
 def flush_lead(db: Session, tenant: Tenant, lead_id: str) -> dict:
     """Intenta enviar los eventos en cola de un lead. Devuelve un resumen."""
     lead = db.scalar(

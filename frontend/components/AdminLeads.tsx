@@ -162,8 +162,12 @@ function ConversionConfigPanel({ clientId }: { clientId: number }) {
 
   async function save(payload: object, label: string) {
     const clean = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== "" && v != null));
-    try { await api(`/admin/clients/${clientId}/conversion-config`, { method: "PUT", body: JSON.stringify(clean) }); toast(label); load(); }
-    catch { toast("No se pudo guardar"); }
+    try {
+      const r = await api<{ flushed?: { sent: number; failed: number } }>(`/admin/clients/${clientId}/conversion-config`, { method: "PUT", body: JSON.stringify(clean) });
+      const f = r.flushed;
+      toast(f && (f.sent || f.failed) ? `${label} · ${f.sent} enviados, ${f.failed} con error` : label);
+      load();
+    } catch { toast("No se pudo guardar"); }
   }
 
   const badge = (ok: boolean) => <span className="text-[11px] font-bold px-[8px] py-[2px] rounded-[20px]" style={ok ? { background: "#e7f7f0", color: "#0f7a54" } : { background: "#fdf3dd", color: "#8a6b16" }}>{ok ? "Listo" : "Falta config"}</span>;

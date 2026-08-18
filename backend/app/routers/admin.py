@@ -557,7 +557,14 @@ def set_conversion_config(client_id: int, body: ConversionIn, db: Session = Depe
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(c, field, value)
     db.commit()
-    return {"ok": True, "meta_ready": c.meta_ready, "google_ready": c.google_ready}
+    # Al quedar listo, reintenta automáticamente los eventos en cola del cliente.
+    flushed = {"sent": 0, "failed": 0, "skipped": 0}
+    if c.meta_ready or c.google_ready:
+        from app.leadhub import conversions
+        tenant = db.get(Tenant, client_id)
+        if tenant is not None:
+            flushed = conversions.flush_tenant_queued(db, tenant)
+    return {"ok": True, "meta_ready": c.meta_ready, "google_ready": c.google_ready, "flushed": flushed}
 
 
 @router.get("/clients/{client_id}/meta-pages")
