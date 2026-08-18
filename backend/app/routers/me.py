@@ -31,4 +31,5 @@ def my_tenant(tenant: Tenant = Depends(get_current_tenant)) -> dict:
         "status": tenant.status,
         "odoo_partner_id": tenant.odoo_partner_id,
         "brand_primary": tenant.brand_primary,
+        "enabled_modules": tenant.enabled_modules,  # null = todos
     }

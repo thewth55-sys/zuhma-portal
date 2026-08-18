@@ -13,6 +13,7 @@ const DEMO_USER: SessionUser = {
   role: "admin",
   tenantName: "Nextcore Consulting",
   planLabel: "Growth B2B · Activo",
+  enabledModules: null,
 };
 
 export default function Page() {
@@ -34,12 +35,14 @@ export default function Page() {
     let role: SessionUser["role"] = "client";
     let tenantName = "";
     let planLabel = "";
+    let enabledModules: string[] | null = null;
     try {
       const me = await api<{ role: SessionUser["role"] }>("/me");
       role = me.role;
-      const t = await api<{ name: string; plan: string | null }>("/me/tenant");
+      const t = await api<{ name: string; plan: string | null; enabled_modules: string[] | null }>("/me/tenant");
       tenantName = t.name;
       planLabel = t.plan ? `${t.plan} · Activo` : "Activo";
+      enabledModules = t.enabled_modules ?? null;
     } catch {
       /* backend/tenant aún no disponible: seguimos con lo que hay */
     }
@@ -49,6 +52,7 @@ export default function Page() {
       role,
       tenantName: tenantName || data.session.user.email || "Cliente",
       planLabel: planLabel || "Cuenta activa",
+      enabledModules,
     });
     setState("in");
   }, []);

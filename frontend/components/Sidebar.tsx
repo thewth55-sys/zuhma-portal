@@ -12,11 +12,18 @@ type Props = {
   userInitials: string;
   userName: string;
   onSignOut: () => void;
+  enabledModules?: string[] | null;
 };
 
-export function Sidebar({ mode, route, onNavigate, tenantName, planLabel, userInitials, userName, onSignOut }: Props) {
-  const items: NavItem[] = mode === "cliente" ? NAV_CLIENTE : NAV_ADMIN;
+export function Sidebar({ mode, route, onNavigate, tenantName, planLabel, userInitials, userName, onSignOut, enabledModules }: Props) {
   const isC = mode === "cliente";
+  // En vista cliente, solo mostrar los módulos habilitados (null = todos).
+  const items: NavItem[] =
+    isC && Array.isArray(enabledModules)
+      ? NAV_CLIENTE.filter((it) => enabledModules.includes(it.k))
+      : isC
+      ? NAV_CLIENTE
+      : NAV_ADMIN;
 
   return (
     <aside className="w-[248px] flex-none flex flex-col sticky top-0 h-screen text-white" style={{ background: "var(--brand-ink)" }}>

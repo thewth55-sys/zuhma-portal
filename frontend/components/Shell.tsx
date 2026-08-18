@@ -10,7 +10,7 @@ import { LeadsView } from "./LeadsView";
 import { ClientesAdmin } from "./ClientesAdmin";
 import { AdminLeads } from "./AdminLeads";
 import { AdminDashboard } from "./AdminDashboard";
-import { setImpersonation } from "@/lib/api";
+import { setImpersonation, api } from "@/lib/api";
 
 export type SessionUser = {
   email: string;
@@ -18,6 +18,7 @@ export type SessionUser = {
   role: "client" | "zuhma_member" | "admin";
   tenantName: string;
   planLabel: string;
+  enabledModules: string[] | null;
 };
 
 function initials(nameOrEmail: string): string {
@@ -34,18 +35,25 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
   const [mode, setMode] = useState<"cliente" | "admin">(canSwitch ? "admin" : "cliente");
   const [route, setRoute] = useState(canSwitch ? "dash" : "inicio");
   const [impersonating, setImpersonatingState] = useState<{ id: number; name: string } | null>(null);
+  const [clientModules, setClientModules] = useState<string[] | null>(user.enabledModules ?? null);
 
   const name = user.full_name || user.email;
 
-  function startImpersonate(id: number, tenantName: string) {
+  async function startImpersonate(id: number, tenantName: string) {
     setImpersonation(id);
     setImpersonatingState({ id, name: tenantName });
     setMode("cliente");
-    setRoute("leads");
+    setRoute("inicio");
+    // Trae los módulos habilitados del cliente suplantado.
+    try {
+      const t = await api<{ enabled_modules: string[] | null }>("/me/tenant");
+      setClientModules(t.enabled_modules ?? null);
+    } catch { setClientModules(null); }
   }
   function stopImpersonate() {
     setImpersonation(null);
     setImpersonatingState(null);
+    setClientModules(user.enabledModules ?? null);
     setMode("admin");
     setRoute("clientes");
   }
@@ -61,6 +69,7 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         userInitials={initials(name)}
         userName={name}
         onSignOut={onSignOut}
+        enabledModules={clientModules}
       />
       <div className="flex-1 min-w-0">
         <Topbar

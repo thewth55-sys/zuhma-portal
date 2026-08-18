@@ -38,6 +38,7 @@ from app.models import (
     UserRole,
 )
 from app.odoo import OdooError, get_odoo
+from app.odoo.repositories import TenantOdooRepository
 from app.routers.leads import CommentIn, LeadIn, LeadPatch, StatusIn
 from app.security.supabase_admin import SupabaseAdminError, invite_user
 
@@ -68,6 +69,7 @@ class ClientPatch(BaseModel):
     status: str | None = None
     odoo_partner_id: int | None = None
     lead_mode: str | None = None
+    enabled_modules: list[str] | None = None
 
 
 def _client_dict(db: Session, t: Tenant) -> dict:
@@ -75,7 +77,7 @@ def _client_dict(db: Session, t: Tenant) -> dict:
     return {
         "id": t.id, "slug": t.slug, "name": t.name, "plan": t.plan_name,
         "status": t.status, "is_active": t.is_active, "lead_mode": t.lead_mode,
-        "odoo_partner_id": t.odoo_partner_id, "users": users,
+        "enabled_modules": t.enabled_modules, "odoo_partner_id": t.odoo_partner_id, "users": users,
     }
 
 
@@ -179,8 +181,37 @@ def update_client(client_id: int, body: ClientPatch, db: Session = Depends(get_d
         if body.lead_mode not in ("agency_managed", "client_managed"):
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "lead_mode inválido.")
         tenant.lead_mode = body.lead_mode
+    if body.enabled_modules is not None:
+        tenant.enabled_modules = body.enabled_modules
     db.commit()
     return _client_dict(db, tenant)
+
+
+# ---------------- Datos de Odoo por cliente (facturas, tareas) ---------------- #
+
+def _odoo_repo(client_id: int, db: Session) -> TenantOdooRepository:
+    tenant = db.get(Tenant, client_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    if not tenant.odoo_partner_id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Este cliente no tiene partner de Odoo vinculado.")
+    return TenantOdooRepository(get_odoo(), tenant.odoo_partner_id)
+
+
+@router.get("/clients/{client_id}/odoo/invoices")
+def client_odoo_invoices(client_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    try:
+        return _odoo_repo(client_id, db).list_invoices(limit=50)
+    except OdooError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+
+
+@router.get("/clients/{client_id}/odoo/tasks")
+def client_odoo_tasks(client_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    try:
+        return _odoo_repo(client_id, db).list_recent_tasks(limit=50)
+    except OdooError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
 
 
 # ---------------- Partners de Odoo (para vincular) ---------------- #

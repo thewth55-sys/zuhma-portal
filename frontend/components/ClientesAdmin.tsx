@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
+import { NAV_CLIENTE } from "@/lib/nav";
 
-type Client = { id: number; slug: string; name: string; plan: string | null; status: string; is_active: boolean; odoo_partner_id: number; users: number };
+type Client = { id: number; slug: string; name: string; plan: string | null; status: string; is_active: boolean; odoo_partner_id: number; users: number; enabled_modules: string[] | null };
+type Invoice = { id: number; number: string; date: string | null; amount_total: number; currency: string; state: string; payment_state: string };
+type Task = { id: number; name: string; project: string | null; stage: string | null; assignee: string | null; deadline: string | null };
 type Partner = { id: number; name: string; email: string | false; is_company: boolean };
 type User = { id: number; email: string; full_name: string | null; role: string };
 type Service = { id: number; metric: string; label: string; used: number; total: number; period: string };
@@ -143,6 +146,10 @@ function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBac
   const [invite, setInvite] = useState({ email: "", full_name: "" });
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [svc, setSvc] = useState({ label: "", total: 0 });
+  const [modules, setModules] = useState<string[]>(client.enabled_modules ?? NAV_CLIENTE.map((n) => n.k));
+  const [invoices, setInvoices] = useState<Invoice[] | null>(null);
+  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [odooErr, setOdooErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -151,6 +158,17 @@ function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBac
     } catch { /* noop */ }
   }, [client.id]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    setOdooErr(null);
+    api<Invoice[]>(`/admin/clients/${client.id}/odoo/invoices`).then(setInvoices).catch((e) => setOdooErr(e instanceof Error ? e.message.replace(/^API \d+: /, "").slice(0, 120) : "Error Odoo"));
+    api<Task[]>(`/admin/clients/${client.id}/odoo/tasks`).then(setTasks).catch(() => {});
+  }, [client.id]);
+
+  function toggleModule(k: string) { setModules((m) => (m.includes(k) ? m.filter((x) => x !== k) : [...m, k])); }
+  async function saveModules() {
+    try { await api(`/admin/clients/${client.id}`, { method: "PATCH", body: JSON.stringify({ enabled_modules: modules }) }); toast("Módulos guardados ✓"); }
+    catch { toast("No se pudo guardar"); }
+  }
 
   async function saveClient() {
     try { await api(`/admin/clients/${client.id}`, { method: "PATCH", body: JSON.stringify({ plan_name: plan, status: statusVal }) }); toast("Cliente actualizado ✓"); }
@@ -194,6 +212,17 @@ function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBac
         </div>
       </Card>
 
+      <Card title="Módulos habilitados" right={<button onClick={saveModules} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={btnPri}>Guardar módulos</button>}>
+        <div className="text-[12.5px] mb-2" style={{ color: "var(--muted)" }}>Marca las secciones que este cliente verá en su portal.</div>
+        <div className="grid gap-2" style={{ gridTemplateColumns: "repeat(3,1fr)" }}>
+          {NAV_CLIENTE.map((n) => (
+            <label key={n.k} className="flex items-center gap-2 text-[13px] px-3 py-2 rounded-[10px] cursor-pointer" style={{ border: "1px solid var(--line)" }}>
+              <input type="checkbox" checked={modules.includes(n.k)} onChange={() => toggleModule(n.k)} /> {n.t}
+            </label>
+          ))}
+        </div>
+      </Card>
+
       <Card title="Usuarios e invitaciones">
         <form onSubmit={sendInvite} className="flex gap-3 flex-wrap items-end mb-4">
           <div className="flex flex-col gap-1 flex-1 min-w-[200px]"><label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>Correo a invitar</label>
@@ -226,6 +255,43 @@ function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBac
         {services.length === 0 ? <div className="text-[13px]" style={{ color: "var(--muted)" }}>Sin servicios configurados.</div> : (
           <table className="w-full"><thead><tr>{["Servicio", "Consumo", "Periodo"].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead><tbody>
             {services.map((s) => (<tr key={s.id}><td className="py-2 text-[13px] font-semibold" style={{ borderTop: "1px solid var(--line)" }}>{s.label}</td><td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{s.used} / {s.total}</td><td className="py-2 text-[12px]" style={{ borderTop: "1px solid var(--line)", color: "var(--muted)" }}>{s.period}</td></tr>))}
+          </tbody></table>
+        )}
+      </Card>
+
+      <Card title="Facturación (Odoo)">
+        {odooErr && <div className="text-[12.5px] mb-2" style={{ color: "var(--bad,#e34948)" }}>{odooErr}</div>}
+        {invoices === null && !odooErr && <div className="text-[13px]" style={{ color: "var(--muted)" }}>Cargando…</div>}
+        {invoices && invoices.length === 0 && <div className="text-[13px]" style={{ color: "var(--muted)" }}>Sin facturas para este partner.</div>}
+        {invoices && invoices.length > 0 && (
+          <table className="w-full"><thead><tr>{["Factura", "Fecha", "Monto", "Estado", "Pago"].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead><tbody>
+            {invoices.map((i) => (
+              <tr key={i.id}>
+                <td className="py-2 text-[13px] font-semibold" style={{ borderTop: "1px solid var(--line)" }}>{i.number}</td>
+                <td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{i.date ?? "—"}</td>
+                <td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>${i.amount_total?.toLocaleString?.() ?? i.amount_total} {i.currency}</td>
+                <td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{i.state}</td>
+                <td className="py-2" style={{ borderTop: "1px solid var(--line)" }}><span className="text-[12px] font-semibold px-[9px] py-[3px] rounded-[20px]" style={i.payment_state === "pagada" ? { background: "#e7f7f0", color: "#0f7a54" } : { background: "#fdf3dd", color: "#8a6b16" }}>{i.payment_state}</span></td>
+              </tr>
+            ))}
+          </tbody></table>
+        )}
+      </Card>
+
+      <Card title="Tareas del proyecto (Odoo)">
+        {tasks === null && <div className="text-[13px]" style={{ color: "var(--muted)" }}>Cargando…</div>}
+        {tasks && tasks.length === 0 && <div className="text-[13px]" style={{ color: "var(--muted)" }}>Sin tareas ligadas a este partner en Odoo. (Los proyectos por nombre se mapearán en una fase posterior.)</div>}
+        {tasks && tasks.length > 0 && (
+          <table className="w-full"><thead><tr>{["Tarea", "Proyecto", "Etapa", "Responsable", "Límite"].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead><tbody>
+            {tasks.map((t) => (
+              <tr key={t.id}>
+                <td className="py-2 text-[13px] font-semibold" style={{ borderTop: "1px solid var(--line)" }}>{t.name}</td>
+                <td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{t.project ?? "—"}</td>
+                <td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{t.stage ?? "—"}</td>
+                <td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{t.assignee ?? "—"}</td>
+                <td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{t.deadline ?? "—"}</td>
+              </tr>
+            ))}
           </tbody></table>
         )}
       </Card>

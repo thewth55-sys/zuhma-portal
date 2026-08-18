@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import BigInteger, Boolean, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -44,6 +45,9 @@ class Tenant(Base, TimestampMixin):
     # Overrides de marca opcionales (logo, color) para white-label futuro.
     brand_primary: Mapped[str | None] = mapped_column(String(9), default=None)
     logo_url: Mapped[str | None] = mapped_column(String(512), default=None)
+
+    # Módulos habilitados para el cliente (claves de la nav). null = todos.
+    enabled_modules: Mapped[list | None] = mapped_column(JSONB, default=None)
 
     users: Mapped[list["AppUser"]] = relationship(back_populates="tenant")  # noqa: F821
     quotas: Mapped[list["PlanQuota"]] = relationship(back_populates="tenant")  # noqa: F821
