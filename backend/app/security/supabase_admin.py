@@ -47,6 +47,35 @@ def delete_user(user_id: str) -> bool:
         return False
 
 
+def recovery_link(email: str) -> str:
+    """Genera un enlace de restablecimiento de contraseña (type=recovery).
+
+    El usuario ya existe en Supabase; este enlace lo lleva al portal a definir una
+    contraseña nueva. Redirige a portal_base_url (debe estar en la allow-list de
+    Redirect URLs del proyecto). No usa el SMTP de Supabase: el portal lo envía.
+    """
+    s = get_settings()
+    if not (s.supabase_url and s.supabase_service_role_key):
+        raise SupabaseAdminError(
+            "Falta SUPABASE_SERVICE_ROLE_KEY (o SUPABASE_URL) en el backend para restablecer contraseñas."
+        )
+    url = f"{s.supabase_url.rstrip('/')}/auth/v1/admin/generate_link"
+    payload: dict = {"type": "recovery", "email": email}
+    if s.portal_base_url:
+        payload["redirect_to"] = s.portal_base_url.rstrip("/")
+    try:
+        resp = httpx.post(url, headers=_headers(s.supabase_service_role_key), json=payload, timeout=15.0)
+    except httpx.HTTPError as exc:
+        raise SupabaseAdminError(f"No se pudo contactar a Supabase: {exc}") from exc
+    if resp.status_code >= 400:
+        raise SupabaseAdminError(f"Supabase rechazó el restablecimiento ({resp.status_code}): {resp.text}")
+    data = resp.json()
+    link = data.get("action_link") or (data.get("properties") or {}).get("action_link")
+    if not link:
+        raise SupabaseAdminError("Supabase no devolvió el enlace de restablecimiento.")
+    return link
+
+
 def invite_user(email: str, full_name: str | None = None) -> InvitedUser:
     s = get_settings()
     if not (s.supabase_url and s.supabase_service_role_key):

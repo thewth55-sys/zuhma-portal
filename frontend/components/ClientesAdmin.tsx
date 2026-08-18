@@ -30,7 +30,7 @@ function Card({ title, right, children }: { title: string; right?: React.ReactNo
 const input = { border: "1px solid var(--line)" } as const;
 const btnPri = { background: "var(--accent)" } as const;
 
-export function ClientesAdmin({ onImpersonate }: { onImpersonate: (id: number, name: string) => void }) {
+export function ClientesAdmin({ onImpersonate, isAdmin = false }: { onImpersonate: (id: number, name: string) => void; isAdmin?: boolean }) {
   const [clients, setClients] = useState<Client[] | null>(null);
   const [openId, setOpenId] = useState<number | null>(null);
   const [creating, setCreating] = useState(false);
@@ -43,7 +43,7 @@ export function ClientesAdmin({ onImpersonate }: { onImpersonate: (id: number, n
 
   if (openId) {
     const c = clients?.find((x) => x.id === openId);
-    return c ? <ClientDetail client={c} onBack={() => { setOpenId(null); load(); }} onImpersonate={onImpersonate} /> : null;
+    return c ? <ClientDetail client={c} onBack={() => { setOpenId(null); load(); }} onImpersonate={onImpersonate} isAdmin={isAdmin} /> : null;
   }
 
   return (
@@ -138,7 +138,7 @@ function NewClientForm({ onCreated }: { onCreated: () => void }) {
   );
 }
 
-function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBack: () => void; onImpersonate: (id: number, name: string) => void }) {
+function ClientDetail({ client, onBack, onImpersonate, isAdmin = false }: { client: Client; onBack: () => void; onImpersonate: (id: number, name: string) => void; isAdmin?: boolean }) {
   const [plan, setPlan] = useState(client.plan ?? "Growth B2B");
   const [statusVal, setStatusVal] = useState(client.status);
   const [users, setUsers] = useState<User[]>([]);
@@ -192,6 +192,15 @@ function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBac
       }
       load();
     } catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "No se pudo invitar"); }
+  }
+  async function resetPwd(u: User) {
+    if (!confirm(`¿Enviar a ${u.email} un enlace para restablecer su contraseña?`)) return;
+    try {
+      const r = await api<{ email_sent?: boolean; action_link?: string | null }>(`/admin/users/${u.id}/reset-password`, { method: "POST" });
+      if (r.email_sent) toast("Enlace enviado por correo ✓");
+      else if (r.action_link) { await navigator.clipboard?.writeText(r.action_link).catch(() => {}); toast("Correo no configurado · enlace copiado al portapapeles"); }
+      else toast("Enlace generado");
+    } catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "").slice(0, 90) : "No se pudo restablecer"); }
   }
   async function addService(e: React.FormEvent) {
     e.preventDefault();
@@ -247,7 +256,7 @@ function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBac
         )}
         {users.length === 0 ? <div className="text-[13px]" style={{ color: "var(--muted)" }}>Sin usuarios todavía.</div> : (
           <table className="w-full"><tbody>
-            {users.map((u) => (<tr key={u.id}><td className="py-2 text-[13px] font-semibold" style={{ borderTop: "1px solid var(--line)" }}>{u.full_name || "—"}</td><td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{u.email}</td><td className="py-2 text-[12px]" style={{ borderTop: "1px solid var(--line)", color: "var(--muted)" }}>{u.role}</td></tr>))}
+            {users.map((u) => (<tr key={u.id}><td className="py-2 text-[13px] font-semibold" style={{ borderTop: "1px solid var(--line)" }}>{u.full_name || "—"}</td><td className="py-2 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{u.email}</td><td className="py-2 text-[12px]" style={{ borderTop: "1px solid var(--line)", color: "var(--muted)" }}>{u.role}</td><td className="py-2 text-right" style={{ borderTop: "1px solid var(--line)" }}>{isAdmin && <button onClick={() => resetPwd(u)} className="text-[12px] font-semibold px-[10px] py-[5px] rounded-[8px]" style={{ border: "1px solid var(--line)" }}>Restablecer contraseña</button>}</td></tr>))}
           </tbody></table>
         )}
       </Card>

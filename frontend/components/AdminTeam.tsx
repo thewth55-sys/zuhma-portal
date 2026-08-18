@@ -186,6 +186,15 @@ function MemberEditor({ member, perms, clients, isAdmin, onSaved }: { member: Me
     try { await api(`/admin/team/${member.id}`, { method: "DELETE" }); toast("Usuario eliminado"); onSaved(); }
     catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "No se pudo eliminar"); }
   }
+  async function resetPwd() {
+    if (!confirm(`¿Enviar a ${member.email} un enlace para restablecer su contraseña?`)) return;
+    try {
+      const r = await api<{ email_sent?: boolean; action_link?: string | null }>(`/admin/users/${member.id}/reset-password`, { method: "POST" });
+      if (r.email_sent) toast("Enlace enviado por correo ✓");
+      else if (r.action_link) { await navigator.clipboard?.writeText(r.action_link).catch(() => {}); toast("Correo no configurado · enlace copiado al portapapeles"); }
+      else toast("Enlace generado");
+    } catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "").slice(0, 90) : "No se pudo restablecer"); }
+  }
 
   return (
     <div className="p-4 flex flex-col gap-4">
@@ -202,6 +211,9 @@ function MemberEditor({ member, perms, clients, isAdmin, onSaved }: { member: Me
       <div className="flex gap-2">
         <button onClick={save} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white" style={btnPri}>Guardar</button>
         <button onClick={toggleActive} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ border: "1px solid var(--line)", color: member.active ? "var(--bad,#e34948)" : "var(--good,#1baf7a)" }}>{member.active ? "Desactivar" : "Activar"}</button>
+        {isAdmin && (
+          <button onClick={resetPwd} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ border: "1px solid var(--line)" }}>Restablecer contraseña</button>
+        )}
         {isAdmin && (
           <button onClick={remove} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white ml-auto" style={{ background: "var(--bad,#e34948)" }}>Eliminar usuario</button>
         )}

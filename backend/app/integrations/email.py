@@ -72,6 +72,27 @@ def otp_email(code: str) -> tuple[str, str]:
     return subject, _BASE.format(body=body)
 
 
+def reset_email(action_link: str) -> tuple[str, str]:
+    """Devuelve (asunto, html) del restablecimiento de contraseña."""
+    subject = "Restablece tu contraseña · zühma+"
+    body = f"""
+    <h1 style="font-size:20px;margin:0 0 8px">Restablecer contraseña</h1>
+    <p style="color:#6b6a7b;font-size:14px;line-height:1.6;margin:0 0 20px">
+      Un administrador solicitó restablecer tu contraseña del portal. Haz clic en el botón
+      para definir una nueva. El enlace vence en 1 hora.
+    </p>
+    <p style="margin:0 0 22px">{_button(action_link, "Definir nueva contraseña")}</p>
+    <p style="color:#9997a8;font-size:12px;line-height:1.6;margin:0">
+      Si el botón no funciona, copia y pega este enlace en tu navegador:<br>
+      <span style="color:#6b6a7b;word-break:break-all">{_html.escape(action_link)}</span>
+    </p>
+    <p style="color:#9997a8;font-size:12px;line-height:1.6;margin:14px 0 0">
+      Si no esperabas este correo, ignóralo: tu contraseña actual seguirá funcionando.
+    </p>
+    """
+    return subject, _BASE.format(body=body)
+
+
 def invite_email(client_name: str, action_link: str) -> tuple[str, str]:
     """Devuelve (asunto, html) de la invitación al portal."""
     subject = f"Te invitaron al portal de {client_name} · zühma+"

@@ -44,7 +44,7 @@ from app.models import (
 from app.odoo import OdooError, get_odoo
 from app.odoo.repositories import TenantOdooRepository
 from app.routers.leads import CommentIn, LeadIn, LeadPatch, StatusIn
-from app.security.supabase_admin import SupabaseAdminError, invite_user
+from app.security.supabase_admin import SupabaseAdminError, invite_user, recovery_link
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_internal)])
 
@@ -376,6 +376,35 @@ def delete_member(member_id: int, actor: AppUser = Depends(require_admin), db: S
     db.delete(u)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/users/{user_id}/reset-password")
+def reset_user_password(user_id: int, actor: AppUser = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+    """Envía al usuario un enlace para definir una contraseña nueva. Solo administradores.
+
+    Sirve para cualquier usuario del portal (miembro interno o cliente). No expone ni
+    cambia la contraseña: Supabase genera un enlace de recuperación y el portal lo envía
+    por correo (Resend). Si Resend no está listo, se devuelve el enlace para compartirlo.
+    """
+    u = db.get(AppUser, user_id)
+    if u is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Usuario no encontrado.")
+    if not u.email:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "El usuario no tiene correo registrado.")
+    try:
+        link = recovery_link(u.email)
+    except SupabaseAdminError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc))
+
+    from app.integrations import email as mailer
+
+    subject, html_body = mailer.reset_email(link)
+    email_sent, email_detail = mailer.send_email(u.email, subject, html_body)
+    # El enlace solo se devuelve como plan B cuando no se pudo enviar el correo.
+    return {
+        "ok": True, "email": u.email, "email_sent": email_sent,
+        "email_detail": email_detail, "action_link": None if email_sent else link,
+    }
 
 
 # ---------------- Partners de Odoo (para vincular) ---------------- #
