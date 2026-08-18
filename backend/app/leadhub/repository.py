@@ -59,6 +59,7 @@ class LeadRepository:
             "channel": lead.channel,
             "status": lead.status.value,
             "owner": lead.owner,
+            "released": lead.released,
             "minutes_in_inbox": mins,
             "overdue": lead.status == LeadStatus.pending and mins >= _OVERDUE_MIN,
             "description": lead.description or "",
@@ -97,8 +98,16 @@ class LeadRepository:
         return card
 
     # --- Consultas --- #
-    def kpis(self) -> dict:
-        base = select(func.count()).select_from(Lead).where(Lead.tenant_id == self.tenant.id)
+    # admin_view=False → vista del CLIENTE: solo leads liberados (released=True).
+    # admin_view=True  → vista del ADMIN: todos, calificados o no, liberados o no.
+    def _scope(self, admin_view: bool):
+        conds = [Lead.tenant_id == self.tenant.id]
+        if not admin_view:
+            conds.append(Lead.released.is_(True))
+        return conds
+
+    def kpis(self, admin_view: bool = False) -> dict:
+        base = select(func.count()).select_from(Lead).where(*self._scope(admin_view))
         pending = self.db.scalar(base.where(Lead.status == LeadStatus.pending)) or 0
         qualified = self.db.scalar(base.where(Lead.status == LeadStatus.potential)) or 0
         total = self.db.scalar(base) or 0
@@ -109,30 +118,47 @@ class LeadRepository:
             "answered_under_24h_pct": 0 if not total else round(100 * (total - pending) / total),
         }
 
-    def list_leads(self, status: str | None = None) -> dict:
-        stmt = select(Lead).where(Lead.tenant_id == self.tenant.id).order_by(Lead.created_at.desc())
+    def list_leads(self, status: str | None = None, admin_view: bool = False) -> dict:
+        stmt = select(Lead).where(*self._scope(admin_view)).order_by(Lead.created_at.desc())
         leads = list(self.db.scalars(stmt))
         counts = {s.value: sum(1 for x in leads if x.status == s) for s in LeadStatus}
         counts["all"] = len(leads)
+        counts["released"] = sum(1 for x in leads if x.released)
+        counts["unreleased"] = sum(1 for x in leads if not x.released)
         if status and status != "all":
             leads = [x for x in leads if x.status.value == status]
-        return {"leads": [self._card(x) for x in leads], "counts": counts}
+        return {"leads": [self._card(x) for x in leads], "counts": counts, "lead_mode": self.tenant.lead_mode}
 
-    def get(self, lead_id: str) -> dict | None:
+    def get(self, lead_id: str, admin_view: bool = False) -> dict | None:
         lead = self.db.scalar(
             select(Lead)
-            .where(Lead.tenant_id == self.tenant.id, Lead.lead_id == lead_id)
+            .where(*self._scope(admin_view), Lead.lead_id == lead_id)
             .options(selectinload(Lead.events), selectinload(Lead.activities))
         )
         return self._detail(lead) if lead else None
+
+    def release(self, lead_id: str, released: bool = True) -> dict | None:
+        lead = self.db.scalar(select(Lead).where(Lead.tenant_id == self.tenant.id, Lead.lead_id == lead_id))
+        if lead is None:
+            return None
+        lead.released = released
+        lead.activities.append(LeadActivity(kind="stage", text="Liberado al cliente." if released else "Retirado del cliente."))
+        self.db.commit()
+        return self.get(lead_id, admin_view=True)
 
     # --- Mutaciones --- #
     def create(self, payload: dict) -> dict:
         answers = payload.get("answers") or {}
         score, band = self._score(answers)
+        # Liberación según el modelo del cliente: client_managed nace liberado;
+        # agency_managed nace SIN liberar (el admin lo suelta al calificar).
+        released = payload.get("released")
+        if released is None:
+            released = self.tenant.lead_mode != "agency_managed"
         lead = Lead(
             tenant_id=self.tenant.id,
             lead_id=_new_lead_id(),
+            released=released,
             contact_name=payload["contact_name"],
             cargo=payload.get("cargo"),
             email=payload.get("email"),

@@ -72,7 +72,7 @@ function Card({ title, tag, children }: { title: string; tag?: string; children:
   );
 }
 
-export function LeadDetail({ leadId, canEdit, onBack }: { leadId: string; canEdit: boolean; onBack: () => void }) {
+export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", configPath = "/leads/config" }: { leadId: string; canEdit: boolean; onBack: () => void; basePath?: string; configPath?: string }) {
   const [tab, setTab] = useState("resumen");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
@@ -84,21 +84,21 @@ export function LeadDetail({ leadId, canEdit, onBack }: { leadId: string; canEdi
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [d, c] = await Promise.all([api<Detail>(`/leads/${encodeURIComponent(leadId)}`), api<Config>("/leads/config")]);
+      const [d, c] = await Promise.all([api<Detail>(`${basePath}/${encodeURIComponent(leadId)}`), api<Config>(configPath)]);
       setDetail(d);
       setConfig(c);
       setAnswers(d.answers || {});
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error cargando el lead.");
     }
-  }, [leadId]);
+  }, [leadId, basePath, configPath]);
 
   useEffect(() => { load(); }, [load]);
 
   async function save() {
     setSaving(true);
     try {
-      const d = await api<Detail>(`/leads/${encodeURIComponent(leadId)}`, { method: "PATCH", body: JSON.stringify({ answers }) });
+      const d = await api<Detail>(`${basePath}/${encodeURIComponent(leadId)}`, { method: "PATCH", body: JSON.stringify({ answers }) });
       setDetail(d);
       setAnswers(d.answers || {});
       toast(`Calificación recalculada: ${d.propensity_score}/18 (${d.propensity_band})`);
@@ -112,7 +112,7 @@ export function LeadDetail({ leadId, canEdit, onBack }: { leadId: string; canEdi
   async function sendComment() {
     if (!comment.trim()) return;
     try {
-      const d = await api<Detail>(`/leads/${encodeURIComponent(leadId)}/comment`, { method: "POST", body: JSON.stringify({ text: comment.trim() }) });
+      const d = await api<Detail>(`${basePath}/${encodeURIComponent(leadId)}/comment`, { method: "POST", body: JSON.stringify({ text: comment.trim() }) });
       setDetail(d);
       setComment("");
       toast("Comentario agregado ✓");

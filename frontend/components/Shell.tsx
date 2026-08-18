@@ -8,6 +8,7 @@ import { LiveChat } from "./LiveChat";
 import { SectionPlaceholder } from "./SectionPlaceholder";
 import { LeadsView } from "./LeadsView";
 import { ClientesAdmin } from "./ClientesAdmin";
+import { AdminLeads } from "./AdminLeads";
 import { setImpersonation } from "@/lib/api";
 
 export type SessionUser = {
@@ -77,6 +78,8 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
           <LeadsView canEdit={canSwitch && !impersonating} />
         ) : mode === "admin" && route === "clientes" ? (
           <ClientesAdmin onImpersonate={startImpersonate} />
+        ) : mode === "admin" && route === "adminleads" ? (
+          <AdminLeads />
         ) : (
           <SectionPlaceholder route={route} mode={mode} />
         )}

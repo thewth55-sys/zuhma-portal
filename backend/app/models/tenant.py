@@ -24,6 +24,11 @@ class Tenant(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(32), default="active")  # active | paused | churned
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
+    # Modelo de negocio de leads:
+    #   agency_managed → Zuhma califica; el cliente ve solo los leads LIBERADOS (Nextcore).
+    #   client_managed → el cliente ve y califica todos; nacen liberados (Cicadehp).
+    lead_mode: Mapped[str] = mapped_column(String(20), default="agency_managed")
+
     # Overrides de marca opcionales (logo, color) para white-label futuro.
     brand_primary: Mapped[str | None] = mapped_column(String(9), default=None)
     logo_url: Mapped[str | None] = mapped_column(String(512), default=None)

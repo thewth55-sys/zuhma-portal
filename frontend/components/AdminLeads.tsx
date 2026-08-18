@@ -1,0 +1,235 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+
+import { LeadDetail } from "./LeadDetail";
+import { api } from "@/lib/api";
+
+type Client = { id: number; name: string; lead_mode: string };
+type Lead = { id: string; name: string; affinity: number | null; band: string | null; channel: string; status: string; owner: string; released: boolean; description: string };
+type ListResp = { leads: Lead[]; counts: Record<string, number>; lead_mode: string };
+type Opt = { value: string; label?: string; points?: number };
+type Question = { key: string; label: string; type: string; section?: string; weight?: number; options?: Opt[] };
+type Config = { name?: string; max_score?: number; questions: Question[]; penalties: Question[]; info_fields: Question[] };
+
+function toast(msg: string) {
+  const t = document.createElement("div");
+  t.textContent = msg;
+  t.style.cssText = "position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--brand-ink);color:#fff;padding:11px 20px;border-radius:12px;font-weight:600;font-size:13.5px;box-shadow:0 10px 30px rgba(0,0,0,.25);z-index:99";
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2000);
+}
+function slug(s: string) { return s.toLowerCase().normalize("NFKD").replace(/[^\w]+/g, "_").replace(/^_|_$/g, "") || "campo"; }
+function bandCls(band: string | null) {
+  return band === "alta" ? { bg: "#e7f7f0", c: "#0f7a54", label: "Alta" } : band === "media" ? { bg: "#fdf3dd", c: "#8a6b16", label: "Media" } : { bg: "#fde8e7", c: "#b23a3a", label: "Baja" };
+}
+const input = { border: "1px solid var(--line)" } as const;
+const btnPri = { background: "var(--accent)" } as const;
+function Card({ title, right, children }: { title: string; right?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="rounded-card p-[18px] mb-4" style={{ background: "var(--surface)", border: "1px solid var(--line)", boxShadow: "0 1px 2px rgba(20,18,40,.04)" }}>
+      <div className="flex items-center justify-between mb-3"><h2 className="text-[16px] m-0 font-bold">{title}</h2>{right}</div>
+      {children}
+    </div>
+  );
+}
+
+export function AdminLeads() {
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientId, setClientId] = useState<number | null>(null);
+  const [data, setData] = useState<ListResp | null>(null);
+  const [mode, setMode] = useState<string>("agency_managed");
+  const [openLead, setOpenLead] = useState<string | null>(null);
+  const [showCfg, setShowCfg] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+
+  useEffect(() => {
+    api<Client[]>("/admin/clients").then((cs) => { setClients(cs); if (cs[0]) setClientId(cs[0].id); }).catch(() => toast("Error cargando clientes"));
+  }, []);
+
+  const load = useCallback(async () => {
+    if (!clientId) return;
+    try {
+      const d = await api<ListResp>(`/admin/clients/${clientId}/leads`);
+      setData(d); setMode(d.lead_mode);
+    } catch { toast("Error cargando leads"); }
+  }, [clientId]);
+  useEffect(() => { load(); }, [load]);
+
+  async function changeMode(m: string) {
+    if (!clientId) return;
+    setMode(m);
+    await api(`/admin/clients/${clientId}`, { method: "PATCH", body: JSON.stringify({ lead_mode: m }) });
+    toast(m === "agency_managed" ? "Modo: Zuhma califica y libera" : "Modo: el cliente ve y califica todo");
+    load();
+  }
+  async function act(id: string, path: string, body: object, msg: string) {
+    if (!clientId) return;
+    try { await api(`/admin/clients/${clientId}/leads/${encodeURIComponent(id)}/${path}`, { method: "POST", body: JSON.stringify(body) }); toast(msg); load(); }
+    catch { toast("No se pudo actualizar"); }
+  }
+
+  if (openLead && clientId) {
+    return <LeadDetail leadId={openLead} canEdit onBack={() => { setOpenLead(null); load(); }} basePath={`/admin/clients/${clientId}/leads`} configPath={`/admin/clients/${clientId}/lead-config`} />;
+  }
+
+  const agency = mode === "agency_managed";
+
+  return (
+    <div className="px-[30px] pt-[26px] pb-[60px] max-w-[1180px]">
+      <div className="flex items-start justify-between mb-4">
+        <div>
+          <h1 className="text-[27px] tracking-tight m-0 mb-[3px] font-bold">Leads por cliente</h1>
+          <p className="m-0" style={{ color: "var(--muted)" }}>El admin ve <b>todos</b> los leads; libera al cliente según el modelo.</p>
+        </div>
+        <div className="flex gap-2 items-center">
+          <select value={clientId ?? ""} onChange={(e) => setClientId(Number(e.target.value))} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input}>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <Card title="Modelo de leads del cliente">
+        <div className="flex gap-3 flex-wrap items-center">
+          <label className={`flex items-center gap-2 text-[13px] px-3 py-2 rounded-[10px] cursor-pointer`} style={{ border: `1px solid ${agency ? "var(--accent)" : "var(--line)"}` }}>
+            <input type="radio" checked={agency} onChange={() => changeMode("agency_managed")} /> <b>Zuhma califica</b> — el cliente ve solo los liberados (Nextcore)
+          </label>
+          <label className={`flex items-center gap-2 text-[13px] px-3 py-2 rounded-[10px] cursor-pointer`} style={{ border: `1px solid ${!agency ? "var(--accent)" : "var(--line)"}` }}>
+            <input type="radio" checked={!agency} onChange={() => changeMode("client_managed")} /> <b>El cliente califica</b> — ve todos los leads (Cicadehp)
+          </label>
+        </div>
+      </Card>
+
+      <Card
+        title={`Leads (${data?.counts.all ?? 0})`}
+        right={
+          <div className="flex gap-2">
+            <button onClick={() => setShowCfg((v) => !v)} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={input as object}>⚙ Campos de calificación</button>
+            <button onClick={() => setShowNew((v) => !v)} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={btnPri}>+ Nuevo lead</button>
+          </div>
+        }
+      >
+        {showNew && clientId && <NewLead clientId={clientId} onDone={() => { setShowNew(false); load(); }} />}
+        {agency && <div className="text-[12.5px] mb-3 px-3 py-2 rounded-[10px]" style={{ background: "#fff7e6", color: "#8a6d1f", border: "1px solid #f6e2b4" }}>En este modo, el cliente <b>solo verá</b> los leads que marques como <b>Liberados</b>.</div>}
+        <table className="w-full">
+          <thead><tr>{["Lead", "Propensidad", "Canal", "Estado", agency ? "Liberado" : "", ""].map((h, i) => <th key={i} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead>
+          <tbody>
+            {data?.leads.map((l) => {
+              const bd = bandCls(l.band);
+              return (
+                <tr key={l.id}>
+                  <td className="py-3" style={{ borderTop: "1px solid var(--line)" }}><div className="font-semibold text-[13.5px]">{l.name}</div><div className="text-[12px] font-mono" style={{ color: "var(--faint)" }}>{l.id}</div></td>
+                  <td className="py-3" style={{ borderTop: "1px solid var(--line)" }}><span className="text-[12px] font-bold px-[9px] py-[3px] rounded-[20px]" style={{ background: bd.bg, color: bd.c }}>{bd.label} {l.affinity ?? "—"}/18</span></td>
+                  <td className="py-3 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{l.channel}</td>
+                  <td className="py-3 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{l.status}</td>
+                  {agency && (
+                    <td className="py-3" style={{ borderTop: "1px solid var(--line)" }}>
+                      {l.released
+                        ? <button onClick={() => act(l.id, "release", { released: false }, "Retirado del cliente")} className="text-[12px] font-semibold px-[9px] py-[4px] rounded-[8px]" style={{ background: "#e7f7f0", color: "#0f7a54" }}>✓ Liberado</button>
+                        : <button onClick={() => act(l.id, "release", { released: true }, "Liberado al cliente ✓")} className="text-[12px] font-semibold px-[9px] py-[4px] rounded-[8px] text-white" style={btnPri}>Liberar</button>}
+                    </td>
+                  )}
+                  <td className="py-3 text-right" style={{ borderTop: "1px solid var(--line)" }}><button onClick={() => setOpenLead(l.id)} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={input as object}>Ver detalle →</button></td>
+                </tr>
+              );
+            })}
+            {data && data.leads.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-[13px]" style={{ color: "var(--muted)" }}>Sin leads para este cliente.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+
+      {showCfg && clientId && <ConfigEditor clientId={clientId} />}
+    </div>
+  );
+}
+
+function NewLead({ clientId, onDone }: { clientId: number; onDone: () => void }) {
+  const [f, setF] = useState({ contact_name: "", company_name: "", email: "", phone: "", channel: "Meta Ads" });
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!f.contact_name.trim()) return;
+    try { await api(`/admin/clients/${clientId}/leads`, { method: "POST", body: JSON.stringify(f) }); toast("Lead creado ✓"); onDone(); }
+    catch { toast("No se pudo crear"); }
+  }
+  return (
+    <form onSubmit={submit} className="flex gap-3 flex-wrap items-end mb-4 pb-4" style={{ borderBottom: "1px solid var(--line)" }}>
+      <Field label="Contacto"><input required value={f.contact_name} onChange={(e) => setF({ ...f, contact_name: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input} /></Field>
+      <Field label="Empresa"><input value={f.company_name} onChange={(e) => setF({ ...f, company_name: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input} /></Field>
+      <Field label="Correo"><input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input} /></Field>
+      <Field label="Teléfono"><input value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input} /></Field>
+      <Field label="Canal"><select value={f.channel} onChange={(e) => setF({ ...f, channel: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input}><option>Meta Ads</option><option>Google Ads</option><option>WhatsApp</option><option>Orgánico</option></select></Field>
+      <button type="submit" className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white" style={btnPri}>Guardar</button>
+    </form>
+  );
+}
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return <div className="flex flex-col gap-1"><label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>{label}</label>{children}</div>;
+}
+
+function ConfigEditor({ clientId }: { clientId: number }) {
+  const [cfg, setCfg] = useState<Config | null>(null);
+  const [q, setQ] = useState({ label: "", weight: 2, options: "Sí:2\nNo:0" });
+  const [req, setReq] = useState({ label: "", type: "text" });
+
+  const load = useCallback(() => { api<Config>(`/admin/clients/${clientId}/lead-config`).then(setCfg).catch(() => {}); }, [clientId]);
+  useEffect(() => { load(); }, [load]);
+
+  async function put(next: Config) {
+    await api(`/admin/clients/${clientId}/lead-config`, { method: "PUT", body: JSON.stringify(next) });
+    setCfg(next); toast("Config guardada ✓");
+  }
+  function addQuestion() {
+    if (!cfg || !q.label.trim()) return;
+    const options = q.options.split("\n").map((l) => l.trim()).filter(Boolean).map((l) => { const [lab, pts] = l.split(":"); return { value: slug(lab), label: lab.trim(), points: Number(pts ?? 0) }; });
+    const next = { ...cfg, questions: [...cfg.questions, { key: slug(q.label), label: q.label.trim(), type: "select", section: "calificacion", weight: Number(q.weight), options }], max_score: (cfg.max_score ?? 0) + Number(q.weight) };
+    put(next); setQ({ label: "", weight: 2, options: "Sí:2\nNo:0" });
+  }
+  function addReq() {
+    if (!cfg || !req.label.trim()) return;
+    const next = { ...cfg, info_fields: [...cfg.info_fields, { key: slug(req.label), label: req.label.trim(), type: req.type, section: "requerimiento" }] };
+    put(next); setReq({ label: "", type: "text" });
+  }
+  function removeQ(key: string) {
+    if (!cfg) return;
+    const removed = cfg.questions.find((x) => x.key === key);
+    put({ ...cfg, questions: cfg.questions.filter((x) => x.key !== key), max_score: (cfg.max_score ?? 0) - (removed?.weight ?? 0) });
+  }
+  function removeReq(key: string) { if (cfg) put({ ...cfg, info_fields: cfg.info_fields.filter((x) => x.key !== key) }); }
+
+  if (!cfg) return null;
+  return (
+    <Card title={`Campos de calificación · máx ${cfg.max_score ?? 18}`}>
+      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
+        <div>
+          <div className="text-[12px] font-bold uppercase mb-2" style={{ color: "var(--faint)" }}>Preguntas con puntaje</div>
+          {cfg.questions.map((x) => (
+            <div key={x.key} className="flex items-center justify-between text-[13px] py-2" style={{ borderTop: "1px solid var(--line)" }}>
+              <span>{x.label} <span style={{ color: "var(--faint)" }}>(máx {x.weight})</span></span>
+              <button onClick={() => removeQ(x.key)} style={{ color: "var(--bad,#e34948)" }}>✕</button>
+            </div>
+          ))}
+          <div className="mt-3 flex flex-col gap-2 p-3 rounded-[10px]" style={{ background: "var(--bg)" }}>
+            <input value={q.label} onChange={(e) => setQ({ ...q, label: e.target.value })} placeholder="Nueva pregunta (ej. ¿Usa la nube?)" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <div className="flex gap-2 items-center"><span className="text-[12px]" style={{ color: "var(--muted)" }}>Peso máx</span><input type="number" value={q.weight} onChange={(e) => setQ({ ...q, weight: Number(e.target.value) })} className="w-[70px] px-2 py-1 rounded-[8px] text-[13px] outline-none" style={input} /></div>
+            <textarea value={q.options} onChange={(e) => setQ({ ...q, options: e.target.value })} placeholder="Opción:puntos (una por línea)" rows={3} className="px-3 py-2 rounded-[8px] text-[13px] outline-none font-mono" style={input} />
+            <button onClick={addQuestion} className="px-3 py-2 rounded-[8px] text-[13px] font-semibold text-white self-start" style={btnPri}>+ Agregar pregunta</button>
+          </div>
+        </div>
+        <div>
+          <div className="text-[12px] font-bold uppercase mb-2" style={{ color: "var(--faint)" }}>Detalles de requerimiento</div>
+          {cfg.info_fields.map((x) => (
+            <div key={x.key} className="flex items-center justify-between text-[13px] py-2" style={{ borderTop: "1px solid var(--line)" }}>
+              <span>{x.label} <span style={{ color: "var(--faint)" }}>({x.type})</span></span>
+              <button onClick={() => removeReq(x.key)} style={{ color: "var(--bad,#e34948)" }}>✕</button>
+            </div>
+          ))}
+          <div className="mt-3 flex flex-col gap-2 p-3 rounded-[10px]" style={{ background: "var(--bg)" }}>
+            <input value={req.label} onChange={(e) => setReq({ ...req, label: e.target.value })} placeholder="Nuevo detalle (ej. Región)" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <select value={req.type} onChange={(e) => setReq({ ...req, type: e.target.value })} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input}><option value="text">Texto</option><option value="number">Número</option><option value="boolean">Sí/No</option></select>
+            <button onClick={addReq} className="px-3 py-2 rounded-[8px] text-[13px] font-semibold text-white self-start" style={btnPri}>+ Agregar detalle</button>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}

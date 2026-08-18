@@ -18,6 +18,7 @@ export const NAV_CLIENTE: NavItem[] = [
 export const NAV_ADMIN: NavItem[] = [
   { k: "dash", t: "Dashboard", i: "grid" },
   { k: "clientes", t: "Clientes", i: "users" },
+  { k: "adminleads", t: "Leads", i: "inbox" },
   { k: "contenido", t: "Contenido", i: "upload" },
   { k: "tareas", t: "Tareas", i: "tasks" },
   { k: "factadmin", t: "Facturación", i: "card" },

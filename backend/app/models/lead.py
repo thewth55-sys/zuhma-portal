@@ -55,6 +55,9 @@ class Lead(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, default=None)   # contexto/requerimiento
     session_date: Mapped[date | None] = mapped_column(Date, default=None)
 
+    # Compuerta de liberación: en agency_managed el cliente solo ve released=True.
+    released: Mapped[bool] = mapped_column(default=True, index=True)
+
     # Respuestas del cuestionario configurable por cliente (key → valor).
     answers: Mapped[dict] = mapped_column(JSONB, default=dict)
 

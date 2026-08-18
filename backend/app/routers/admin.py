@@ -20,8 +20,10 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import require_admin
-from app.models import AppUser, PlanQuota, Tenant, UserRole
+from app.leadhub.repository import LeadRepository
+from app.models import AppUser, LeadConfig, PlanQuota, Tenant, UserRole
 from app.odoo import OdooError, get_odoo
+from app.routers.leads import CommentIn, LeadIn, LeadPatch, StatusIn
 from app.security.supabase_admin import SupabaseAdminError, invite_user
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -50,13 +52,14 @@ class ClientPatch(BaseModel):
     plan_name: str | None = None
     status: str | None = None
     odoo_partner_id: int | None = None
+    lead_mode: str | None = None
 
 
 def _client_dict(db: Session, t: Tenant) -> dict:
     users = db.scalar(select(func.count()).select_from(AppUser).where(AppUser.tenant_id == t.id)) or 0
     return {
         "id": t.id, "slug": t.slug, "name": t.name, "plan": t.plan_name,
-        "status": t.status, "is_active": t.is_active,
+        "status": t.status, "is_active": t.is_active, "lead_mode": t.lead_mode,
         "odoo_partner_id": t.odoo_partner_id, "users": users,
     }
 
@@ -104,6 +107,10 @@ def update_client(client_id: int, body: ClientPatch, db: Session = Depends(get_d
         tenant.is_active = body.status == "active"
     if body.odoo_partner_id is not None:
         tenant.odoo_partner_id = body.odoo_partner_id
+    if body.lead_mode is not None:
+        if body.lead_mode not in ("agency_managed", "client_managed"):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "lead_mode inválido.")
+        tenant.lead_mode = body.lead_mode
     db.commit()
     return _client_dict(db, tenant)
 
@@ -202,3 +209,95 @@ def add_service(client_id: int, body: ServiceIn, db: Session = Depends(get_db)) 
     db.commit()
     db.refresh(q)
     return {"id": q.id, "metric": q.metric, "label": q.label, "used": q.used, "total": q.total, "period": q.period}
+
+
+# ---------------- Leads por cliente (admin ve TODO) ---------------- #
+
+class ReleaseIn(BaseModel):
+    released: bool = True
+
+
+def _lead_repo(client_id: int, db: Session) -> LeadRepository:
+    tenant = db.get(Tenant, client_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    return LeadRepository(db, tenant)
+
+
+@router.get("/clients/{client_id}/leads/kpis")
+def admin_lead_kpis(client_id: int, db: Session = Depends(get_db)) -> dict:
+    return _lead_repo(client_id, db).kpis(admin_view=True)
+
+
+@router.get("/clients/{client_id}/lead-config")
+def admin_lead_config(client_id: int, db: Session = Depends(get_db)) -> dict:
+    return _lead_repo(client_id, db).get_config()
+
+
+@router.put("/clients/{client_id}/lead-config")
+def save_lead_config(client_id: int, body: dict, db: Session = Depends(get_db)) -> dict:
+    if db.get(Tenant, client_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    row = db.scalar(select(LeadConfig).where(LeadConfig.tenant_id == client_id))
+    if row is None:
+        row = LeadConfig(tenant_id=client_id, config=body)
+        db.add(row)
+    else:
+        row.config = body
+    db.commit()
+    return body
+
+
+@router.get("/clients/{client_id}/leads")
+def admin_list_leads(client_id: int, status_filter: str | None = None, db: Session = Depends(get_db)) -> dict:
+    return _lead_repo(client_id, db).list_leads(status_filter, admin_view=True)
+
+
+@router.get("/clients/{client_id}/leads/{lead_id}")
+def admin_get_lead(client_id: int, lead_id: str, db: Session = Depends(get_db)) -> dict:
+    detail = _lead_repo(client_id, db).get(lead_id, admin_view=True)
+    if detail is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return detail
+
+
+@router.post("/clients/{client_id}/leads", status_code=status.HTTP_201_CREATED)
+def admin_create_lead(client_id: int, body: LeadIn, db: Session = Depends(get_db)) -> dict:
+    if not body.contact_name.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El nombre del contacto es obligatorio.")
+    return _lead_repo(client_id, db).create(body.model_dump())
+
+
+@router.patch("/clients/{client_id}/leads/{lead_id}")
+def admin_update_lead(client_id: int, lead_id: str, body: LeadPatch, db: Session = Depends(get_db)) -> dict:
+    updated = _lead_repo(client_id, db).update(lead_id, body.model_dump(exclude_none=True))
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return updated
+
+
+@router.post("/clients/{client_id}/leads/{lead_id}/status")
+def admin_set_status(client_id: int, lead_id: str, body: StatusIn, db: Session = Depends(get_db)) -> dict:
+    try:
+        updated = _lead_repo(client_id, db).set_status(lead_id, body.status)
+    except KeyError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return updated
+
+
+@router.post("/clients/{client_id}/leads/{lead_id}/release")
+def admin_release_lead(client_id: int, lead_id: str, body: ReleaseIn, db: Session = Depends(get_db)) -> dict:
+    updated = _lead_repo(client_id, db).release(lead_id, body.released)
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return updated
+
+
+@router.post("/clients/{client_id}/leads/{lead_id}/comment")
+def admin_comment_lead(client_id: int, lead_id: str, body: CommentIn, user: AppUser = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+    updated = _lead_repo(client_id, db).add_comment(lead_id, body.text.strip(), user.full_name or user.email)
+    if updated is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return updated
