@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     # --- App ---
     app_env: str = "development"
     log_level: str = "INFO"
+    # Cifrado en reposo de secretos en la BD (Fernet). Genera con:
+    #   python3 -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    master_key: str = ""
     cors_allow_origins: str = "http://localhost:3000"
     # Emails con rol elevado (admin / miembro Zuhma) al iniciar sesión.
     zuhma_admin_emails: str = ""

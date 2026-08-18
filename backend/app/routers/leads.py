@@ -125,7 +125,10 @@ def set_status(lead_id: str, body: StatusIn, repo: LeadRepository = Depends(get_
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
-    return updated
+    # Al calificar (potential) se generó el evento de conversión; intentamos enviarlo.
+    from app.leadhub import conversions
+    conversions.flush_lead(repo.db, repo.tenant, lead_id)
+    return repo.get(lead_id) or updated
 
 
 @router.post("/{lead_id}/comment")

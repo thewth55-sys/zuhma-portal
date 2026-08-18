@@ -70,7 +70,7 @@ export function AdminLeads() {
   }
 
   if (openLead && clientId) {
-    return <LeadDetail leadId={openLead} canEdit onBack={() => { setOpenLead(null); load(); }} basePath={`/admin/clients/${clientId}/leads`} configPath={`/admin/clients/${clientId}/lead-config`} />;
+    return <LeadDetail leadId={openLead} canEdit adminActions onBack={() => { setOpenLead(null); load(); }} basePath={`/admin/clients/${clientId}/leads`} configPath={`/admin/clients/${clientId}/lead-config`} />;
   }
 
   const agency = mode === "agency_managed";
@@ -140,8 +140,62 @@ export function AdminLeads() {
 
       {clientId && <LeadSources clientId={clientId} />}
       {clientId && <MetaConnect clientId={clientId} />}
+      {clientId && <ConversionConfigPanel clientId={clientId} />}
       {showCfg && clientId && <ConfigEditor clientId={clientId} />}
     </div>
+  );
+}
+
+type ConvCfg = {
+  meta_ready: boolean; google_ready: boolean; meta_pixel_id: string | null; meta_test_event_code: string | null; has_meta_token: boolean;
+  google_customer_id: string | null; google_login_customer_id: string | null; google_conversion_action_id: string | null;
+  has_google_dev_token: boolean; google_client_id: string | null; has_google_secret: boolean; has_google_refresh: boolean;
+};
+
+function ConversionConfigPanel({ clientId }: { clientId: number }) {
+  const [cfg, setCfg] = useState<ConvCfg | null>(null);
+  const [meta, setMeta] = useState({ meta_pixel_id: "", meta_capi_token: "", meta_test_event_code: "" });
+  const [g, setG] = useState({ google_customer_id: "", google_login_customer_id: "", google_conversion_action_id: "", google_developer_token: "", google_client_id: "", google_client_secret: "", google_refresh_token: "" });
+
+  const load = useCallback(() => { api<ConvCfg>(`/admin/clients/${clientId}/conversion-config`).then((c) => { setCfg(c); setMeta({ meta_pixel_id: c.meta_pixel_id || "", meta_capi_token: "", meta_test_event_code: c.meta_test_event_code || "" }); setG((s) => ({ ...s, google_customer_id: c.google_customer_id || "", google_login_customer_id: c.google_login_customer_id || "", google_conversion_action_id: c.google_conversion_action_id || "", google_client_id: c.google_client_id || "" })); }).catch(() => {}); }, [clientId]);
+  useEffect(() => { load(); }, [load]);
+
+  async function save(payload: object, label: string) {
+    const clean = Object.fromEntries(Object.entries(payload).filter(([, v]) => v !== "" && v != null));
+    try { await api(`/admin/clients/${clientId}/conversion-config`, { method: "PUT", body: JSON.stringify(clean) }); toast(label); load(); }
+    catch { toast("No se pudo guardar"); }
+  }
+
+  const badge = (ok: boolean) => <span className="text-[11px] font-bold px-[8px] py-[2px] rounded-[20px]" style={ok ? { background: "#e7f7f0", color: "#0f7a54" } : { background: "#fdf3dd", color: "#8a6b16" }}>{ok ? "Listo" : "Falta config"}</span>;
+
+  return (
+    <Card title="Motor de conversiones (CAPI / Google Ads)">
+      <div className="text-[12.5px] mb-3" style={{ color: "var(--muted)" }}>Al <b>calificar</b> un lead, el portal dispara el evento de conversión server-side con el mismo Lead ID. Configura las credenciales por cliente (secretos cifrados en reposo).</div>
+      <div className="grid gap-4" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
+        <div className="p-3 rounded-[10px]" style={{ border: "1px solid var(--line)" }}>
+          <div className="flex items-center justify-between mb-2"><div className="font-semibold text-[13.5px]">Meta CAPI</div>{cfg && badge(cfg.meta_ready)}</div>
+          <div className="flex flex-col gap-2">
+            <input value={meta.meta_pixel_id} onChange={(e) => setMeta({ ...meta, meta_pixel_id: e.target.value })} placeholder="Pixel / Dataset ID" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={meta.meta_capi_token} onChange={(e) => setMeta({ ...meta, meta_capi_token: e.target.value })} placeholder={cfg?.has_meta_token ? "CAPI token (guardado — deja vacío para no cambiar)" : "CAPI access token"} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={meta.meta_test_event_code} onChange={(e) => setMeta({ ...meta, meta_test_event_code: e.target.value })} placeholder="Test event code (opcional)" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <button onClick={() => save(meta, "Meta CAPI guardado ✓")} className="px-3 py-2 rounded-[8px] text-[13px] font-semibold text-white self-start" style={btnPri}>Guardar Meta</button>
+          </div>
+        </div>
+        <div className="p-3 rounded-[10px]" style={{ border: "1px solid var(--line)" }}>
+          <div className="flex items-center justify-between mb-2"><div className="font-semibold text-[13.5px]">Google Ads (offline)</div>{cfg && badge(cfg.google_ready)}</div>
+          <div className="flex flex-col gap-2">
+            <input value={g.google_customer_id} onChange={(e) => setG({ ...g, google_customer_id: e.target.value })} placeholder="Customer ID (sin guiones)" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={g.google_login_customer_id} onChange={(e) => setG({ ...g, google_login_customer_id: e.target.value })} placeholder="Login Customer ID (MCC, opcional)" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={g.google_conversion_action_id} onChange={(e) => setG({ ...g, google_conversion_action_id: e.target.value })} placeholder="Conversion Action ID" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={g.google_developer_token} onChange={(e) => setG({ ...g, google_developer_token: e.target.value })} placeholder={cfg?.has_google_dev_token ? "Developer token (guardado)" : "Developer token"} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={g.google_client_id} onChange={(e) => setG({ ...g, google_client_id: e.target.value })} placeholder="OAuth Client ID" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={g.google_client_secret} onChange={(e) => setG({ ...g, google_client_secret: e.target.value })} placeholder={cfg?.has_google_secret ? "Client secret (guardado)" : "OAuth Client secret"} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <input value={g.google_refresh_token} onChange={(e) => setG({ ...g, google_refresh_token: e.target.value })} placeholder={cfg?.has_google_refresh ? "Refresh token (guardado)" : "OAuth Refresh token"} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
+            <button onClick={() => save(g, "Google Ads guardado ✓")} className="px-3 py-2 rounded-[8px] text-[13px] font-semibold text-white self-start" style={btnPri}>Guardar Google</button>
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 

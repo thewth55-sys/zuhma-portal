@@ -15,6 +15,7 @@ from app.models.lead import (
     LeadStatus,
 )
 from app.models.meta import MetaPage
+from app.models.conversion import ConversionConfig
 
 __all__ = [
     "Base",
@@ -33,4 +34,5 @@ __all__ = [
     "LeadStatus",
     "EventStatus",
     "MetaPage",
+    "ConversionConfig",
 ]

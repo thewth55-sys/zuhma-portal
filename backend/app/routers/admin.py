@@ -24,7 +24,7 @@ from app.db import get_db
 from app.deps import require_admin
 from app.integrations import meta as meta_api
 from app.leadhub.repository import LeadRepository
-from app.models import AppUser, LeadConfig, MetaPage, PlanQuota, Tenant, UserRole
+from app.models import AppUser, ConversionConfig, LeadConfig, MetaPage, PlanQuota, Tenant, UserRole
 from app.odoo import OdooError, get_odoo
 from app.routers.leads import CommentIn, LeadIn, LeadPatch, StatusIn
 from app.security.supabase_admin import SupabaseAdminError, invite_user
@@ -281,13 +281,28 @@ def admin_update_lead(client_id: int, lead_id: str, body: LeadPatch, db: Session
 
 @router.post("/clients/{client_id}/leads/{lead_id}/status")
 def admin_set_status(client_id: int, lead_id: str, body: StatusIn, db: Session = Depends(get_db)) -> dict:
+    repo = _lead_repo(client_id, db)
     try:
-        updated = _lead_repo(client_id, db).set_status(lead_id, body.status)
+        updated = repo.set_status(lead_id, body.status)
     except KeyError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
-    return updated
+    from app.leadhub import conversions
+    conversions.flush_lead(db, repo.tenant, lead_id)
+    return repo.get(lead_id, admin_view=True) or updated
+
+
+@router.post("/clients/{client_id}/leads/{lead_id}/flush")
+def admin_flush_events(client_id: int, lead_id: str, db: Session = Depends(get_db)) -> dict:
+    """Reintenta enviar los eventos de conversión en cola del lead."""
+    repo = _lead_repo(client_id, db)
+    from app.leadhub import conversions
+    summary = conversions.flush_lead(db, repo.tenant, lead_id)
+    detail = repo.get(lead_id, admin_view=True)
+    if detail is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
+    return {"summary": summary, "lead": detail}
 
 
 @router.post("/clients/{client_id}/leads/{lead_id}/release")
@@ -399,6 +414,54 @@ def clear_client_meta_app(client_id: int, db: Session = Depends(get_db)) -> dict
     t.meta_app_id = t.meta_app_secret = t.meta_verify_token = None
     db.commit()
     return {"ok": True}
+
+
+class ConversionIn(BaseModel):
+    meta_pixel_id: str | None = None
+    meta_capi_token: str | None = None
+    meta_test_event_code: str | None = None
+    google_customer_id: str | None = None
+    google_login_customer_id: str | None = None
+    google_conversion_action_id: str | None = None
+    google_developer_token: str | None = None
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_refresh_token: str | None = None
+
+
+@router.get("/clients/{client_id}/conversion-config")
+def get_conversion_config(client_id: int, db: Session = Depends(get_db)) -> dict:
+    c = db.scalar(select(ConversionConfig).where(ConversionConfig.tenant_id == client_id))
+    if c is None:
+        return {"meta_ready": False, "google_ready": False, "meta_pixel_id": None, "meta_test_event_code": None,
+                "has_meta_token": False, "google_customer_id": None, "google_login_customer_id": None,
+                "google_conversion_action_id": None, "has_google_dev_token": False,
+                "google_client_id": None, "has_google_secret": False, "has_google_refresh": False}
+    return {
+        "meta_ready": c.meta_ready, "google_ready": c.google_ready,
+        "meta_pixel_id": c.meta_pixel_id, "meta_test_event_code": c.meta_test_event_code,
+        "has_meta_token": bool(c.meta_capi_token),
+        "google_customer_id": c.google_customer_id, "google_login_customer_id": c.google_login_customer_id,
+        "google_conversion_action_id": c.google_conversion_action_id,
+        "has_google_dev_token": bool(c.google_developer_token),
+        "google_client_id": c.google_client_id,
+        "has_google_secret": bool(c.google_client_secret), "has_google_refresh": bool(c.google_refresh_token),
+    }
+
+
+@router.put("/clients/{client_id}/conversion-config")
+def set_conversion_config(client_id: int, body: ConversionIn, db: Session = Depends(get_db)) -> dict:
+    if db.get(Tenant, client_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    c = db.scalar(select(ConversionConfig).where(ConversionConfig.tenant_id == client_id))
+    if c is None:
+        c = ConversionConfig(tenant_id=client_id)
+        db.add(c)
+    # Solo actualiza los campos enviados (para no borrar secretos ya guardados).
+    for field, value in body.model_dump(exclude_none=True).items():
+        setattr(c, field, value)
+    db.commit()
+    return {"ok": True, "meta_ready": c.meta_ready, "google_ready": c.google_ready}
 
 
 @router.get("/clients/{client_id}/meta-pages")

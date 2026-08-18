@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from sqlalchemy import Boolean, ForeignKey, String, Text
+from sqlalchemy import Boolean, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
+from app.security.types import EncryptedString
 
 
 class MetaPage(Base, TimestampMixin):
@@ -19,5 +20,5 @@ class MetaPage(Base, TimestampMixin):
     tenant_id: Mapped[int] = mapped_column(ForeignKey("tenant.id"), index=True)
     page_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     page_name: Mapped[str | None] = mapped_column(String(255), default=None)
-    page_access_token: Mapped[str] = mapped_column(Text)
+    page_access_token: Mapped[str] = mapped_column(EncryptedString)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

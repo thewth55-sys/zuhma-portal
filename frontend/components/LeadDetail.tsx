@@ -72,7 +72,7 @@ function Card({ title, tag, children }: { title: string; tag?: string; children:
   );
 }
 
-export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", configPath = "/leads/config" }: { leadId: string; canEdit: boolean; onBack: () => void; basePath?: string; configPath?: string }) {
+export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", configPath = "/leads/config", adminActions = false }: { leadId: string; canEdit: boolean; onBack: () => void; basePath?: string; configPath?: string; adminActions?: boolean }) {
   const [tab, setTab] = useState("resumen");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
@@ -107,6 +107,14 @@ export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", confi
     } finally {
       setSaving(false);
     }
+  }
+
+  async function flushEvents() {
+    try {
+      await api(`${basePath}/${encodeURIComponent(leadId)}/flush`, { method: "POST" });
+      toast("Reintentando envío de eventos…");
+      load();
+    } catch { toast("No se pudo reenviar"); }
   }
 
   async function sendComment() {
@@ -287,7 +295,12 @@ export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", confi
             <Row k="UTM source / medium" v={`${attr.utm_source || "—"} / ${attr.utm_medium || "—"}`} />
             <Row k="UTM campaign" v={attr.utm_campaign || "—"} />
           </Card>
-          <Card title="Eventos de conversión (CAPI / Google Ads)">
+          <Card title="Eventos de conversión (CAPI / Google Ads)" tag={undefined}>
+            {adminActions && (
+              <div className="flex justify-end mb-2">
+                <button onClick={flushEvents} className="text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={{ background: "var(--accent)" }}>↻ Reintentar envío</button>
+              </div>
+            )}
             {detail.events.length === 0 ? (
               <div style={{ color: "var(--muted)" }}>Sin eventos todavía.</div>
             ) : (

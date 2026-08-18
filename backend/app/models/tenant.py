@@ -4,6 +4,7 @@ from sqlalchemy import BigInteger, Boolean, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+from app.security.types import EncryptedString
 
 
 class Tenant(Base, TimestampMixin):
@@ -36,7 +37,7 @@ class Tenant(Base, TimestampMixin):
     # credenciales y una URL de webhook dedicada (meta_webhook_token). Si no, se usa la
     # App global de Zuhma. NOTA: el secret es sensible; cifrar en reposo a futuro.
     meta_app_id: Mapped[str | None] = mapped_column(String(64), default=None)
-    meta_app_secret: Mapped[str | None] = mapped_column(String(255), default=None)
+    meta_app_secret: Mapped[str | None] = mapped_column(EncryptedString, default=None)
     meta_verify_token: Mapped[str | None] = mapped_column(String(120), default=None)
     meta_webhook_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
 
