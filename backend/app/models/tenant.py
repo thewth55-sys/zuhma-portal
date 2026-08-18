@@ -29,6 +29,9 @@ class Tenant(Base, TimestampMixin):
     #   client_managed → el cliente ve y califica todos; nacen liberados (Cicadehp).
     lead_mode: Mapped[str] = mapped_column(String(20), default="agency_managed")
 
+    # Token opaco para la ingesta de leads por webhook (Meta/Chatwoot/WordPress/n8n → Lead Hub).
+    ingest_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
+
     # Overrides de marca opcionales (logo, color) para white-label futuro.
     brand_primary: Mapped[str | None] = mapped_column(String(9), default=None)
     logo_url: Mapped[str | None] = mapped_column(String(512), default=None)

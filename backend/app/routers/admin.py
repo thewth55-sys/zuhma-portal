@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 import unicodedata
 from datetime import datetime, timezone
 
@@ -301,3 +302,31 @@ def admin_comment_lead(client_id: int, lead_id: str, body: CommentIn, user: AppU
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
     return updated
+
+
+# ---------------- Fuentes de leads (webhook de ingesta) ---------------- #
+
+def _ensure_token(tenant: Tenant, db: Session) -> str:
+    if not tenant.ingest_token:
+        tenant.ingest_token = secrets.token_urlsafe(24)
+        db.commit()
+    return tenant.ingest_token
+
+
+@router.get("/clients/{client_id}/ingest")
+def get_ingest(client_id: int, db: Session = Depends(get_db)) -> dict:
+    tenant = db.get(Tenant, client_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    token = _ensure_token(tenant, db)
+    return {"token": token, "path": f"/ingest/{token}/lead"}
+
+
+@router.post("/clients/{client_id}/ingest/rotate")
+def rotate_ingest(client_id: int, db: Session = Depends(get_db)) -> dict:
+    tenant = db.get(Tenant, client_id)
+    if tenant is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    tenant.ingest_token = secrets.token_urlsafe(24)
+    db.commit()
+    return {"token": tenant.ingest_token, "path": f"/ingest/{tenant.ingest_token}/lead"}

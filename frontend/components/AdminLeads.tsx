@@ -138,8 +138,50 @@ export function AdminLeads() {
         </table>
       </Card>
 
+      {clientId && <LeadSources clientId={clientId} />}
       {showCfg && clientId && <ConfigEditor clientId={clientId} />}
     </div>
+  );
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "";
+
+function LeadSources({ clientId }: { clientId: number }) {
+  const [path, setPath] = useState<string | null>(null);
+  const load = useCallback(() => { api<{ path: string }>(`/admin/clients/${clientId}/ingest`).then((r) => setPath(r.path)).catch(() => {}); }, [clientId]);
+  useEffect(() => { load(); }, [load]);
+  const url = path ? `${API_BASE}${path}` : "…";
+
+  async function rotate() {
+    if (!confirm("¿Rotar el token? Los orígenes ya configurados dejarán de funcionar hasta actualizar la URL.")) return;
+    const r = await api<{ path: string }>(`/admin/clients/${clientId}/ingest/rotate`, { method: "POST" });
+    setPath(r.path); toast("Token rotado");
+  }
+
+  const sources = [
+    { t: "Formulario de cliente potencial de Meta", d: "Meta Lead Ads → n8n (nodo Meta Lead Ads) → POST a este webhook. El Lead ID y fbclid/fbc viajan en el payload." },
+    { t: "Chatwoot (self-host)", d: "Webhook de Chatwoot (Conversation Created) → n8n → POST a este webhook. Reusa tu flujo chatwoot/whatsapp existente." },
+    { t: "WordPress · Fluent Forms / Contact Form 7", d: "Instala el snippet JS (captura gclid/fbclid/fbc/fbp/utm en campos ocultos) y añade un webhook del formulario (o n8n form→lead) que haga POST aquí con esos campos." },
+    { t: "Alta manual", d: "El botón \"+ Nuevo lead\" de arriba, o el detalle del lead." },
+  ];
+
+  return (
+    <Card title="Fuentes de leads (ingesta)" right={<button onClick={rotate} className="text-[12px] font-semibold px-[10px] py-[5px] rounded-[8px]" style={{ border: "1px solid var(--line)", color: "var(--bad,#e34948)" }}>Rotar token</button>}>
+      <div className="text-[12.5px] mb-2" style={{ color: "var(--muted)" }}>Todos los orígenes hacen <b>POST</b> a este webhook único del cliente (JSON con contacto + atribución):</div>
+      <div className="flex items-center gap-2 mb-4 p-3 rounded-[10px]" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>
+        <code className="flex-1 text-[12.5px] truncate">POST {url}</code>
+        <button onClick={() => { navigator.clipboard.writeText(url); toast("URL copiada"); }} className="px-3 py-1 rounded-[8px] text-white text-[12px] font-semibold" style={btnPri}>Copiar</button>
+      </div>
+      <div className="grid gap-3" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        {sources.map((s) => (
+          <div key={s.t} className="p-3 rounded-[10px]" style={{ border: "1px solid var(--line)" }}>
+            <div className="font-semibold text-[13.5px] mb-1">{s.t}</div>
+            <div className="text-[12.5px]" style={{ color: "var(--muted)" }}>{s.d}</div>
+          </div>
+        ))}
+      </div>
+      <div className="text-[12px] mt-3" style={{ color: "var(--faint)" }}>Campos aceptados: contact_name (req), email, phone, company_name, website, cargo, channel, description, answers, gclid, fbclid, fbc, fbp, utm_source, utm_medium, utm_campaign.</div>
+    </Card>
   );
 }
 
@@ -149,7 +191,7 @@ function NewLead({ clientId, onDone }: { clientId: number; onDone: () => void })
     e.preventDefault();
     if (!f.contact_name.trim()) return;
     try { await api(`/admin/clients/${clientId}/leads`, { method: "POST", body: JSON.stringify(f) }); toast("Lead creado ✓"); onDone(); }
-    catch { toast("No se pudo crear"); }
+    catch (err) { toast(err instanceof Error ? err.message.replace(/^API \d+: /, "").slice(0, 90) : "No se pudo crear"); }
   }
   return (
     <form onSubmit={submit} className="flex gap-3 flex-wrap items-end mb-4 pb-4" style={{ borderBottom: "1px solid var(--line)" }}>

@@ -184,7 +184,8 @@ class LeadRepository:
         lead.events.append(LeadEvent(event_name="Lead", destination="both", event_id=lead.lead_id))
         self.db.commit()
         self.db.refresh(lead)
-        return self.get(lead.lead_id)  # type: ignore[return-value]
+        # admin_view=True: devuelve el lead recién creado aunque nazca sin liberar (agency).
+        return self.get(lead.lead_id, admin_view=True)  # type: ignore[return-value]
 
     def update(self, lead_id: str, payload: dict) -> dict | None:
         lead = self.db.scalar(select(Lead).where(Lead.tenant_id == self.tenant.id, Lead.lead_id == lead_id))
