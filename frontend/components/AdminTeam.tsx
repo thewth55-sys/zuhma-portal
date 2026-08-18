@@ -34,7 +34,7 @@ function Card({ title, right, children }: { title: string; right?: React.ReactNo
   );
 }
 
-export function AdminTeam() {
+export function AdminTeam({ isAdmin = false }: { isAdmin?: boolean }) {
   const [members, setMembers] = useState<Member[] | null>(null);
   const [perms, setPerms] = useState<string[]>([]);
   const [clients, setClients] = useState<ClientLite[]>([]);
@@ -81,7 +81,7 @@ export function AdminTeam() {
                 </tr>
                 {openId === m.id && (
                   <tr><td colSpan={6} style={{ borderTop: "1px solid var(--line)", background: "var(--bg)" }}>
-                    <MemberEditor member={m} perms={perms} clients={clients} onSaved={() => { setOpenId(null); load(); }} />
+                    <MemberEditor member={m} perms={perms} clients={clients} isAdmin={isAdmin} onSaved={() => { setOpenId(null); load(); }} />
                   </td></tr>
                 )}
               </Fragment>
@@ -165,7 +165,7 @@ function InviteForm({ perms, clients, onDone }: { perms: string[]; clients: Clie
   );
 }
 
-function MemberEditor({ member, perms, clients, onSaved }: { member: Member; perms: string[]; clients: ClientLite[]; onSaved: () => void }) {
+function MemberEditor({ member, perms, clients, isAdmin, onSaved }: { member: Member; perms: string[]; clients: ClientLite[]; isAdmin: boolean; onSaved: () => void }) {
   const [sel, setSel] = useState<string[]>(member.permissions);
   const [allClients, setAllClients] = useState(member.managed_client_ids === null);
   const [ids, setIds] = useState<number[]>(member.managed_client_ids ?? []);
@@ -180,6 +180,11 @@ function MemberEditor({ member, perms, clients, onSaved }: { member: Member; per
   async function toggleActive() {
     try { await api(`/admin/team/${member.id}`, { method: "PATCH", body: JSON.stringify({ active: !member.active }) }); toast(member.active ? "Desactivado" : "Activado"); onSaved(); }
     catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "Error"); }
+  }
+  async function remove() {
+    if (!confirm(`¿Eliminar definitivamente a ${member.email}? Esta acción no se puede deshacer.`)) return;
+    try { await api(`/admin/team/${member.id}`, { method: "DELETE" }); toast("Usuario eliminado"); onSaved(); }
+    catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "No se pudo eliminar"); }
   }
 
   return (
@@ -197,6 +202,9 @@ function MemberEditor({ member, perms, clients, onSaved }: { member: Member; per
       <div className="flex gap-2">
         <button onClick={save} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white" style={btnPri}>Guardar</button>
         <button onClick={toggleActive} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold" style={{ border: "1px solid var(--line)", color: member.active ? "var(--bad,#e34948)" : "var(--good,#1baf7a)" }}>{member.active ? "Desactivar" : "Activar"}</button>
+        {isAdmin && (
+          <button onClick={remove} className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white ml-auto" style={{ background: "var(--bad,#e34948)" }}>Eliminar usuario</button>
+        )}
       </div>
     </div>
   );

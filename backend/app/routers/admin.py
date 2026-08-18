@@ -16,12 +16,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.deps import allowed_client_ids, require_internal, require_permission
+from app.deps import allowed_client_ids, require_admin, require_internal, require_permission
 from app.integrations import meta as meta_api
 from app.leadhub.repository import LeadRepository
 from app.models import (
@@ -29,11 +29,14 @@ from app.models import (
     AppUser,
     ConversionConfig,
     EventStatus,
+    ImpersonationAudit,
     Lead,
     LeadConfig,
     LeadEvent,
     LeadStatus,
+    LoginOtp,
     MetaPage,
+    MfaSession,
     PlanQuota,
     Tenant,
     UserRole,
@@ -350,6 +353,29 @@ def update_member(member_id: int, body: TeamPatchIn, db: Session = Depends(get_d
         u.active = body.active
     db.commit()
     return _member_dict(u)
+
+
+@router.delete("/team/{member_id}")
+def delete_member(member_id: int, actor: AppUser = Depends(require_admin), db: Session = Depends(get_db)) -> dict:
+    """Elimina definitivamente a un miembro interno. Solo administradores."""
+    u = db.get(AppUser, member_id)
+    if u is None or u.role == UserRole.client:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Miembro no encontrado.")
+    if u.id == actor.id:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "No puedes eliminarte a ti mismo.")
+
+    from app.security.supabase_admin import delete_user as sb_delete
+
+    if u.supabase_user_id:
+        sb_delete(u.supabase_user_id)  # best-effort: libera el correo en Supabase
+
+    # Limpia dependencias antes de borrar (FKs).
+    db.execute(delete(LoginOtp).where(LoginOtp.user_id == u.id))
+    db.execute(delete(MfaSession).where(MfaSession.user_id == u.id))
+    db.execute(delete(ImpersonationAudit).where(ImpersonationAudit.admin_user_id == u.id))
+    db.delete(u)
+    db.commit()
+    return {"ok": True}
 
 
 # ---------------- Partners de Odoo (para vincular) ---------------- #

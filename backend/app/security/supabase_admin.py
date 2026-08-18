@@ -30,6 +30,23 @@ def _headers(key: str) -> dict:
     return {"apikey": key, "Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
 
+def delete_user(user_id: str) -> bool:
+    """Elimina el usuario en Supabase (para liberar el correo). Best-effort."""
+    s = get_settings()
+    if not (s.supabase_url and s.supabase_service_role_key):
+        return False
+    try:
+        resp = httpx.request(
+            "DELETE",
+            f"{s.supabase_url.rstrip('/')}/auth/v1/admin/users/{user_id}",
+            headers=_headers(s.supabase_service_role_key),
+            timeout=15.0,
+        )
+        return resp.status_code < 400
+    except httpx.HTTPError:
+        return False
+
+
 def invite_user(email: str, full_name: str | None = None) -> InvitedUser:
     s = get_settings()
     if not (s.supabase_url and s.supabase_service_role_key):

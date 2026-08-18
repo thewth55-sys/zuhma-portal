@@ -85,7 +85,7 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         ) : mode === "admin" && route === "adminleads" ? (
           <AdminLeads />
         ) : mode === "admin" && route === "equipo" ? (
-          <AdminTeam />
+          <AdminTeam isAdmin={user.role === "admin"} />
         ) : (
           <SectionPlaceholder route={route} mode={mode} />
         )}
