@@ -40,6 +40,11 @@ export async function api<T = unknown>(
   const res = await fetch(`${BASE}${path}`, { ...opts, headers });
   if (!res.ok) {
     const detail = await res.text().catch(() => res.statusText);
+    // Sesión sin 2FA → reinicia el flujo (mostrará la pantalla del código).
+    if (res.status === 403 && detail.includes("MFA_REQUIRED") && typeof window !== "undefined") {
+      window.location.reload();
+      await new Promise(() => {}); // no continúa (la página se recarga)
+    }
     throw new Error(`API ${res.status}: ${detail}`);
   }
   return res.json() as Promise<T>;
