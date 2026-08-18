@@ -567,6 +567,18 @@ def set_conversion_config(client_id: int, body: ConversionIn, db: Session = Depe
     return {"ok": True, "meta_ready": c.meta_ready, "google_ready": c.google_ready, "flushed": flushed}
 
 
+@router.post("/clients/{client_id}/conversion-config/test-meta")
+def test_meta_capi(client_id: int, db: Session = Depends(get_db)) -> dict:
+    """Envía un evento de prueba a Meta CAPI y devuelve la respuesta cruda."""
+    c = db.scalar(select(ConversionConfig).where(ConversionConfig.tenant_id == client_id))
+    if c is None or not c.meta_ready:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Meta CAPI sin configurar para este cliente.")
+    from app.integrations import capi
+
+    ok, detail = capi.send_test(c)
+    return {"ok": ok, "detail": detail, "test_event_code": c.meta_test_event_code}
+
+
 @router.get("/clients/{client_id}/meta-pages")
 def list_meta_pages(client_id: int, db: Session = Depends(get_db)) -> list[dict]:
     pages = db.scalars(select(MetaPage).where(MetaPage.tenant_id == client_id)).all()

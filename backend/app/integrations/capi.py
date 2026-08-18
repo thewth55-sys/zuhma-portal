@@ -16,6 +16,29 @@ from app.config import get_settings
 from app.models import ConversionConfig, Lead, LeadEvent
 
 
+def send_test(config: ConversionConfig) -> tuple[bool, str]:
+    """Envía un evento de prueba y devuelve la respuesta cruda de Meta (diagnóstico)."""
+    s = get_settings()
+    url = f"https://graph.facebook.com/{s.meta_graph_version}/{config.meta_pixel_id}/events"
+    payload: dict = {
+        "data": [{
+            "event_name": "Lead",
+            "event_time": int(time.time()),
+            "event_id": f"test-{int(time.time())}",
+            "action_source": "system_generated",
+            "user_data": {"em": [hashlib.sha256(b"test@zuhma.online").hexdigest()]},
+        }],
+        "access_token": config.meta_capi_token,
+    }
+    if config.meta_test_event_code:
+        payload["test_event_code"] = config.meta_test_event_code
+    try:
+        resp = httpx.post(url, json=payload, timeout=15.0)
+    except httpx.HTTPError as exc:
+        return False, f"Error de red: {exc}"
+    return (resp.status_code < 400), f"{resp.status_code}: {resp.text[:500]}"
+
+
 def _sha256(value: str | None) -> str | None:
     if not value:
         return None

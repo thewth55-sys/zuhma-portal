@@ -156,6 +156,15 @@ function ConversionConfigPanel({ clientId }: { clientId: number }) {
   const [cfg, setCfg] = useState<ConvCfg | null>(null);
   const [meta, setMeta] = useState({ meta_pixel_id: "", meta_capi_token: "", meta_test_event_code: "" });
   const [g, setG] = useState({ google_customer_id: "", google_login_customer_id: "", google_conversion_action_id: "", google_developer_token: "", google_client_id: "", google_client_secret: "", google_refresh_token: "" });
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  async function testMeta() {
+    setTestResult("Enviando evento de prueba…");
+    try {
+      const r = await api<{ ok: boolean; detail: string; test_event_code: string | null }>(`/admin/clients/${clientId}/conversion-config/test-meta`, { method: "POST" });
+      setTestResult(`${r.ok ? "✅" : "❌"} ${r.detail}${r.test_event_code ? `  ·  test_event_code=${r.test_event_code}` : "  ·  (sin test_event_code)"}`);
+    } catch (e) { setTestResult(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "Error"); }
+  }
 
   const load = useCallback(() => { api<ConvCfg>(`/admin/clients/${clientId}/conversion-config`).then((c) => { setCfg(c); setMeta({ meta_pixel_id: c.meta_pixel_id || "", meta_capi_token: "", meta_test_event_code: c.meta_test_event_code || "" }); setG((s) => ({ ...s, google_customer_id: c.google_customer_id || "", google_login_customer_id: c.google_login_customer_id || "", google_conversion_action_id: c.google_conversion_action_id || "", google_client_id: c.google_client_id || "" })); }).catch(() => {}); }, [clientId]);
   useEffect(() => { load(); }, [load]);
@@ -182,7 +191,11 @@ function ConversionConfigPanel({ clientId }: { clientId: number }) {
             <input value={meta.meta_pixel_id} onChange={(e) => setMeta({ ...meta, meta_pixel_id: e.target.value })} placeholder="Pixel / Dataset ID" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
             <input value={meta.meta_capi_token} onChange={(e) => setMeta({ ...meta, meta_capi_token: e.target.value })} placeholder={cfg?.has_meta_token ? "CAPI token (guardado — deja vacío para no cambiar)" : "CAPI access token"} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
             <input value={meta.meta_test_event_code} onChange={(e) => setMeta({ ...meta, meta_test_event_code: e.target.value })} placeholder="Test event code (opcional)" className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} />
-            <button onClick={() => save(meta, "Meta CAPI guardado ✓")} className="px-3 py-2 rounded-[8px] text-[13px] font-semibold text-white self-start" style={btnPri}>Guardar Meta</button>
+            <div className="flex gap-2">
+              <button onClick={() => save(meta, "Meta CAPI guardado ✓")} className="px-3 py-2 rounded-[8px] text-[13px] font-semibold text-white" style={btnPri}>Guardar Meta</button>
+              {cfg?.meta_ready && <button onClick={testMeta} className="px-3 py-2 rounded-[8px] text-[13px] font-semibold" style={{ border: "1px solid var(--line)" }}>Probar Meta CAPI</button>}
+            </div>
+            {testResult && <div className="text-[11.5px] font-mono mt-1 p-2 rounded-[8px]" style={{ background: "var(--bg)", border: "1px solid var(--line)", wordBreak: "break-all" }}>{testResult}</div>}
           </div>
         </div>
         <div className="p-3 rounded-[10px]" style={{ border: "1px solid var(--line)" }}>
