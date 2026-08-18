@@ -24,7 +24,19 @@ from app.db import get_db
 from app.deps import require_admin
 from app.integrations import meta as meta_api
 from app.leadhub.repository import LeadRepository
-from app.models import AppUser, ConversionConfig, LeadConfig, MetaPage, PlanQuota, Tenant, UserRole
+from app.models import (
+    AppUser,
+    ConversionConfig,
+    EventStatus,
+    Lead,
+    LeadConfig,
+    LeadEvent,
+    LeadStatus,
+    MetaPage,
+    PlanQuota,
+    Tenant,
+    UserRole,
+)
 from app.odoo import OdooError, get_odoo
 from app.routers.leads import CommentIn, LeadIn, LeadPatch, StatusIn
 from app.security.supabase_admin import SupabaseAdminError, invite_user
@@ -64,6 +76,59 @@ def _client_dict(db: Session, t: Tenant) -> dict:
         "id": t.id, "slug": t.slug, "name": t.name, "plan": t.plan_name,
         "status": t.status, "is_active": t.is_active, "lead_mode": t.lead_mode,
         "odoo_partner_id": t.odoo_partner_id, "users": users,
+    }
+
+
+@router.get("/dashboard")
+def dashboard(db: Session = Depends(get_db)) -> dict:
+    """Vista general del negocio para el admin (datos de la base propia)."""
+    tenants = db.scalars(select(Tenant).order_by(Tenant.name)).all()
+    clients_active = sum(1 for t in tenants if t.is_active)
+
+    def count(*where) -> int:
+        return db.scalar(select(func.count()).select_from(Lead).where(*where)) or 0
+
+    leads_total = count()
+    leads_pending = count(Lead.status == LeadStatus.pending)
+    leads_qualified = count(Lead.status == LeadStatus.potential)
+    events_sent = db.scalar(
+        select(func.count()).select_from(LeadEvent).where(LeadEvent.status == EventStatus.sent)
+    ) or 0
+    events_queued = db.scalar(
+        select(func.count()).select_from(LeadEvent).where(LeadEvent.status == EventStatus.queued)
+    ) or 0
+
+    per_client = []
+    for t in tenants:
+        per_client.append({
+            "id": t.id, "name": t.name, "plan": t.plan_name, "status": t.status,
+            "lead_mode": t.lead_mode,
+            "leads": count(Lead.tenant_id == t.id),
+            "qualified": count(Lead.tenant_id == t.id, Lead.status == LeadStatus.potential),
+            "users": db.scalar(select(func.count()).select_from(AppUser).where(AppUser.tenant_id == t.id)) or 0,
+        })
+
+    recent_rows = db.execute(
+        select(Lead.lead_id, Lead.contact_name, Lead.channel, Lead.propensity_band, Lead.created_at, Tenant.name)
+        .join(Tenant, Tenant.id == Lead.tenant_id)
+        .order_by(Lead.created_at.desc()).limit(8)
+    ).all()
+    recent = [
+        {"lead_id": r[0], "name": r[1], "channel": r[2], "band": r[3],
+         "at": r[4].isoformat() if r[4] else None, "client": r[5]}
+        for r in recent_rows
+    ]
+
+    return {
+        "clients_total": len(tenants),
+        "clients_active": clients_active,
+        "leads_total": leads_total,
+        "leads_pending": leads_pending,
+        "leads_qualified": leads_qualified,
+        "events_sent": events_sent,
+        "events_queued": events_queued,
+        "per_client": per_client,
+        "recent": recent,
     }
 
 

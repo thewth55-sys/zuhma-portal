@@ -9,6 +9,7 @@ import { SectionPlaceholder } from "./SectionPlaceholder";
 import { LeadsView } from "./LeadsView";
 import { ClientesAdmin } from "./ClientesAdmin";
 import { AdminLeads } from "./AdminLeads";
+import { AdminDashboard } from "./AdminDashboard";
 import { setImpersonation } from "@/lib/api";
 
 export type SessionUser = {
@@ -29,8 +30,9 @@ function initials(nameOrEmail: string): string {
 
 export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () => void }) {
   const canSwitch = user.role === "admin" || user.role === "zuhma_member";
-  const [mode, setMode] = useState<"cliente" | "admin">("cliente");
-  const [route, setRoute] = useState("inicio");
+  // El equipo Zuhma aterriza en el panel admin; el cliente en su Inicio.
+  const [mode, setMode] = useState<"cliente" | "admin">(canSwitch ? "admin" : "cliente");
+  const [route, setRoute] = useState(canSwitch ? "dash" : "inicio");
   const [impersonating, setImpersonatingState] = useState<{ id: number; name: string } | null>(null);
 
   const name = user.full_name || user.email;
@@ -76,6 +78,8 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         />
         {mode === "cliente" && route === "leads" ? (
           <LeadsView canEdit={canSwitch && !impersonating} />
+        ) : mode === "admin" && route === "dash" ? (
+          <AdminDashboard onOpenClients={() => setRoute("clientes")} onOpenLeads={() => setRoute("adminleads")} />
         ) : mode === "admin" && route === "clientes" ? (
           <ClientesAdmin onImpersonate={startImpersonate} />
         ) : mode === "admin" && route === "adminleads" ? (
