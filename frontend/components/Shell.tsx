@@ -11,6 +11,7 @@ import { ClientesAdmin } from "./ClientesAdmin";
 import { AdminLeads } from "./AdminLeads";
 import { AdminDashboard } from "./AdminDashboard";
 import { AdminTeam } from "./AdminTeam";
+import { Profile } from "./Profile";
 import { setImpersonation, api } from "@/lib/api";
 
 export type SessionUser = {
@@ -86,6 +87,8 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
           <AdminLeads />
         ) : mode === "admin" && route === "equipo" ? (
           <AdminTeam isAdmin={user.role === "admin"} />
+        ) : (mode === "cliente" && route === "perfil") || (mode === "admin" && route === "miperfil") ? (
+          <Profile email={user.email} fullName={user.full_name} />
         ) : (
           <SectionPlaceholder route={route} mode={mode} />
         )}

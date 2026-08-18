@@ -25,6 +25,7 @@ export const NAV_ADMIN: NavItem[] = [
   { k: "equipo", t: "Equipo", i: "user" },
   { k: "activ", t: "Actividad", i: "bolt" },
   { k: "config", t: "Configuración", i: "gear" },
+  { k: "miperfil", t: "Mi perfil", i: "user" },
 ];
 
 // Permiso requerido por cada sección admin (null = cualquier usuario interno).
@@ -38,6 +39,7 @@ export const ADMIN_PERM: Record<string, string | null> = {
   equipo: "manage_team",
   activ: null,
   config: "manage_team",
+  miperfil: null,
 };
 
 // Subconjunto de iconos usados por la navegación (paths del prototipo).

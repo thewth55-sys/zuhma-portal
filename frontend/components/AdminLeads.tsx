@@ -92,10 +92,10 @@ export function AdminLeads() {
       <Card title="Modelo de leads del cliente">
         <div className="flex gap-3 flex-wrap items-center">
           <label className={`flex items-center gap-2 text-[13px] px-3 py-2 rounded-[10px] cursor-pointer`} style={{ border: `1px solid ${agency ? "var(--accent)" : "var(--line)"}` }}>
-            <input type="radio" checked={agency} onChange={() => changeMode("agency_managed")} /> <b>Zuhma califica</b> — el cliente ve solo los liberados (Nextcore)
+            <input type="radio" checked={agency} onChange={() => changeMode("agency_managed")} /> <b>Zuhma califica</b> — el cliente ve solo los liberados
           </label>
           <label className={`flex items-center gap-2 text-[13px] px-3 py-2 rounded-[10px] cursor-pointer`} style={{ border: `1px solid ${!agency ? "var(--accent)" : "var(--line)"}` }}>
-            <input type="radio" checked={!agency} onChange={() => changeMode("client_managed")} /> <b>El cliente califica</b> — ve todos los leads (Cicadehp)
+            <input type="radio" checked={!agency} onChange={() => changeMode("client_managed")} /> <b>El cliente califica</b> — ve todos los leads
           </label>
         </div>
       </Card>
