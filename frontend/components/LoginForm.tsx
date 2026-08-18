@@ -30,8 +30,11 @@ export function LoginForm({ onSignedIn }: { onSignedIn: () => void }) {
       setError("Completa la verificación anti-robots.");
       return;
     }
-    // Recordar en este equipo: define dónde se guarda la sesión.
-    if (typeof window !== "undefined") window.localStorage.setItem("zuhma_remember", remember ? "1" : "0");
+    // Recordar en este equipo (sin tocar el token: se evalúa al arrancar la app).
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("zuhma_remember", remember ? "1" : "0");
+      window.sessionStorage.setItem("zuhma_tab", "1"); // marca de esta sesión de navegador
+    }
 
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({

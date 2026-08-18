@@ -66,6 +66,17 @@ export default function Page() {
   const checkFlow = useCallback(async () => {
     const supabase = getSupabase();
     if (!supabase) { setFlow("out"); return; }
+    // "Recordar en este equipo": si el usuario NO quiso recordar y esta es una sesión
+    // NUEVA del navegador (sin marca de pestaña), cerramos. Recargar en la misma pestaña
+    // conserva la marca → NO cierra sesión al recargar.
+    if (typeof window !== "undefined") {
+      if (window.localStorage.getItem("zuhma_remember") === "0" && !window.sessionStorage.getItem("zuhma_tab")) {
+        await supabase.auth.signOut();
+        setFlow("out");
+        return;
+      }
+      window.sessionStorage.setItem("zuhma_tab", "1");
+    }
     const { data } = await supabase.auth.getSession();
     if (!data.session) { setFlow("out"); return; }
     // Activación por invitación / recuperación → crear contraseña primero.
