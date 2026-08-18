@@ -66,6 +66,10 @@ class Settings(BaseSettings):
         return {e.strip().lower() for e in self.zuhma_admin_emails.split(",") if e.strip()}
 
     @property
+    def email_configured(self) -> bool:
+        return bool(self.resend_api_key and self.resend_from)
+
+    @property
     def odoo_configured(self) -> bool:
         return bool(self.odoo_url and self.odoo_db and self.odoo_service_login and self.odoo_service_api_key)
 

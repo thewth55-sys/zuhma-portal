@@ -35,6 +35,7 @@ class AuthError(Exception):
 class SupabaseIdentity:
     sub: str
     email: str
+    session_id: str | None = None
 
 
 def _jwks() -> dict:
@@ -85,4 +86,4 @@ def verify_token(token: str) -> SupabaseIdentity:
     email = (claims.get("email") or "").lower()
     if not sub:
         raise AuthError("El token no contiene 'sub'.")
-    return SupabaseIdentity(sub=sub, email=email)
+    return SupabaseIdentity(sub=sub, email=email, session_id=claims.get("session_id"))

@@ -55,6 +55,23 @@ def _button(url: str, label: str) -> str:
     )
 
 
+def otp_email(code: str) -> tuple[str, str]:
+    """Devuelve (asunto, html) del código de verificación (2FA)."""
+    subject = f"Tu código de acceso: {code} · zühma+"
+    body = f"""
+    <h1 style="font-size:20px;margin:0 0 8px">Código de verificación</h1>
+    <p style="color:#6b6a7b;font-size:14px;line-height:1.6;margin:0 0 18px">
+      Usa este código para completar tu inicio de sesión. Vence en 10 minutos.
+    </p>
+    <div style="font-size:34px;font-weight:800;letter-spacing:8px;color:#f26152;
+      background:#fdece6;border-radius:12px;padding:16px;text-align:center">{code}</div>
+    <p style="color:#9997a8;font-size:12px;line-height:1.6;margin:18px 0 0">
+      Si no intentaste iniciar sesión, ignora este correo.
+    </p>
+    """
+    return subject, _BASE.format(body=body)
+
+
 def invite_email(client_name: str, action_link: str) -> tuple[str, str]:
     """Devuelve (asunto, html) de la invitación al portal."""
     subject = f"Te invitaron al portal de {client_name} · zühma+"

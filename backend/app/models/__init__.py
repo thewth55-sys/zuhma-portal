@@ -16,6 +16,7 @@ from app.models.lead import (
 )
 from app.models.meta import MetaPage
 from app.models.conversion import ConversionConfig
+from app.models.auth import LoginOtp, MfaSession
 
 __all__ = [
     "Base",
@@ -35,4 +36,6 @@ __all__ = [
     "EventStatus",
     "MetaPage",
     "ConversionConfig",
+    "LoginOtp",
+    "MfaSession",
 ]

@@ -12,6 +12,7 @@ Regla dura: el aislamiento se decide AQUÍ (backend), nunca en el frontend.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from fastapi import Depends, Header, HTTPException, status
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import get_db
-from app.models import AppUser, ImpersonationAudit, Tenant, UserRole
+from app.models import AppUser, ImpersonationAudit, MfaSession, Tenant, UserRole
 from app.odoo import get_odoo
 from app.odoo.repositories import TenantOdooRepository
 from app.security.supabase_auth import AuthError, verify_token
@@ -34,10 +35,17 @@ def _bearer(authorization: str | None) -> str:
     return authorization.split(" ", 1)[1].strip()
 
 
-def get_current_user(
+@dataclass
+class AuthContext:
+    user: AppUser
+    session_id: str | None
+
+
+def get_auth_context(
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
-) -> AppUser:
+) -> AuthContext:
+    """Resuelve el usuario SIN exigir 2FA (para el propio flujo de 2FA)."""
     token = _bearer(authorization)
     try:
         ident = verify_token(token)
@@ -54,7 +62,23 @@ def get_current_user(
         db.refresh(user)
     if not user.active:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Tu cuenta está desactivada. Contacta a Zuhma.")
-    return user
+    return AuthContext(user=user, session_id=ident.session_id)
+
+
+def get_current_user(
+    ctx: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+) -> AppUser:
+    """Usuario autenticado Y con 2FA verificado para esta sesión.
+
+    El 2FA solo se exige si el correo (Resend) está configurado — así una caída de correo
+    no deja a nadie fuera.
+    """
+    if settings.email_configured and ctx.session_id:
+        if db.get(MfaSession, ctx.session_id) is None:
+            # El frontend detecta este código y muestra la pantalla del código por correo.
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "MFA_REQUIRED")
+    return ctx.user
 
 
 def require_internal(user: AppUser = Depends(get_current_user)) -> AppUser:
