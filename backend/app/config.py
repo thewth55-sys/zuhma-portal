@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     leadhub_mode: str = "stub"  # stub | live
     leadhub_base_url: str = ""
 
+    # --- Meta Lead Ads (integración nativa; secretos solo backend) ---
+    meta_app_id: str = ""
+    meta_app_secret: str = ""
+    meta_verify_token: str = ""          # el que pones en el webhook de la App de Meta
+    meta_graph_version: str = "v20.0"
+
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]

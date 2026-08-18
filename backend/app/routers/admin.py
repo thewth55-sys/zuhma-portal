@@ -19,10 +19,12 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.db import get_db
 from app.deps import require_admin
+from app.integrations import meta as meta_api
 from app.leadhub.repository import LeadRepository
-from app.models import AppUser, LeadConfig, PlanQuota, Tenant, UserRole
+from app.models import AppUser, LeadConfig, MetaPage, PlanQuota, Tenant, UserRole
 from app.odoo import OdooError, get_odoo
 from app.routers.leads import CommentIn, LeadIn, LeadPatch, StatusIn
 from app.security.supabase_admin import SupabaseAdminError, invite_user
@@ -330,3 +332,56 @@ def rotate_ingest(client_id: int, db: Session = Depends(get_db)) -> dict:
     tenant.ingest_token = secrets.token_urlsafe(24)
     db.commit()
     return {"token": tenant.ingest_token, "path": f"/ingest/{tenant.ingest_token}/lead"}
+
+
+# ---------------- Meta Lead Ads (integración nativa) ---------------- #
+
+class MetaPageIn(BaseModel):
+    page_id: str
+    page_name: str | None = None
+    page_access_token: str
+
+
+@router.get("/meta/config")
+def meta_config() -> dict:
+    """Datos para configurar el webhook en la App de Meta (Developers → Webhooks)."""
+    s = get_settings()
+    return {
+        "callback_path": "/webhooks/meta",
+        "verify_token_set": bool(s.meta_verify_token),
+        "app_configured": bool(s.meta_app_id and s.meta_app_secret),
+        "graph_version": s.meta_graph_version,
+    }
+
+
+@router.get("/clients/{client_id}/meta-pages")
+def list_meta_pages(client_id: int, db: Session = Depends(get_db)) -> list[dict]:
+    pages = db.scalars(select(MetaPage).where(MetaPage.tenant_id == client_id)).all()
+    return [{"id": p.id, "page_id": p.page_id, "page_name": p.page_name, "is_active": p.is_active} for p in pages]
+
+
+@router.post("/clients/{client_id}/meta-pages", status_code=status.HTTP_201_CREATED)
+def connect_meta_page(client_id: int, body: MetaPageIn, db: Session = Depends(get_db)) -> dict:
+    if db.get(Tenant, client_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    if db.scalar(select(MetaPage).where(MetaPage.page_id == body.page_id)):
+        raise HTTPException(status.HTTP_409_CONFLICT, "Esa página ya está conectada.")
+    page = MetaPage(
+        tenant_id=client_id, page_id=body.page_id.strip(),
+        page_name=body.page_name, page_access_token=body.page_access_token.strip(),
+    )
+    db.add(page)
+    db.commit()
+    # Suscribe la App al campo 'leadgen' de la página (best-effort; se reporta el resultado).
+    sub = meta_api.subscribe_page(page.page_id, page.page_access_token)
+    return {"id": page.id, "page_id": page.page_id, "subscribe": sub}
+
+
+@router.delete("/clients/{client_id}/meta-pages/{page_pk}")
+def disconnect_meta_page(client_id: int, page_pk: int, db: Session = Depends(get_db)) -> dict:
+    page = db.get(MetaPage, page_pk)
+    if page is None or page.tenant_id != client_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Página no encontrada.")
+    page.is_active = False
+    db.commit()
+    return {"ok": True}

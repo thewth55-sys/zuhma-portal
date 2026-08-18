@@ -14,6 +14,7 @@ from app.models.lead import (
     LeadEvent,
     LeadStatus,
 )
+from app.models.meta import MetaPage
 
 __all__ = [
     "Base",
@@ -31,4 +32,5 @@ __all__ = [
     "LeadConfig",
     "LeadStatus",
     "EventStatus",
+    "MetaPage",
 ]

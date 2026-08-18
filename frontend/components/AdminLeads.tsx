@@ -139,8 +139,82 @@ export function AdminLeads() {
       </Card>
 
       {clientId && <LeadSources clientId={clientId} />}
+      {clientId && <MetaConnect clientId={clientId} />}
       {showCfg && clientId && <ConfigEditor clientId={clientId} />}
     </div>
+  );
+}
+
+type MetaCfg = { callback_path: string; verify_token_set: boolean; app_configured: boolean; graph_version: string };
+type MetaPage = { id: number; page_id: string; page_name: string | null; is_active: boolean };
+
+function MetaConnect({ clientId }: { clientId: number }) {
+  const [cfg, setCfg] = useState<MetaCfg | null>(null);
+  const [pages, setPages] = useState<MetaPage[]>([]);
+  const [f, setF] = useState({ page_id: "", page_name: "", page_access_token: "" });
+
+  const load = useCallback(async () => {
+    try {
+      const [c, p] = await Promise.all([api<MetaCfg>("/admin/meta/config"), api<MetaPage[]>(`/admin/clients/${clientId}/meta-pages`)]);
+      setCfg(c); setPages(p);
+    } catch { /* noop */ }
+  }, [clientId]);
+  useEffect(() => { load(); }, [load]);
+
+  async function connect(e: React.FormEvent) {
+    e.preventDefault();
+    if (!f.page_id.trim() || !f.page_access_token.trim()) return;
+    try {
+      const r = await api<{ subscribe: { ok: boolean; detail?: string } }>(`/admin/clients/${clientId}/meta-pages`, { method: "POST", body: JSON.stringify(f) });
+      toast(r.subscribe?.ok ? "Página conectada y suscrita ✓" : "Página guardada; revisa la suscripción");
+      setF({ page_id: "", page_name: "", page_access_token: "" });
+      load();
+    } catch (err) { toast(err instanceof Error ? err.message.replace(/^API \d+: /, "").slice(0, 90) : "No se pudo conectar"); }
+  }
+  async function disconnect(pk: number) {
+    await api(`/admin/clients/${clientId}/meta-pages/${pk}`, { method: "DELETE" }); toast("Página desconectada"); load();
+  }
+
+  const callback = cfg ? `${API_BASE}${cfg.callback_path}` : "…";
+
+  return (
+    <Card title="Meta Lead Ads (integración nativa)">
+      <div className="text-[12.5px] mb-3" style={{ color: "var(--muted)" }}>
+        Los leads de formularios de Meta llegan <b>directo</b> aquí (sin n8n). Configura el webhook una vez en tu App de Meta y conecta la página del cliente.
+      </div>
+      <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
+        <div className="p-3 rounded-[10px]" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>
+          <div className="text-[11px] font-bold uppercase mb-1" style={{ color: "var(--faint)" }}>Webhook (Meta → Developers → Webhooks)</div>
+          <div className="flex items-center gap-2"><code className="flex-1 text-[12px] truncate">{callback}</code><button onClick={() => { navigator.clipboard.writeText(callback); toast("Copiado"); }} className="px-2 py-1 rounded-[7px] text-white text-[11px] font-semibold" style={btnPri}>Copiar</button></div>
+          <div className="text-[12px] mt-1">Campo a suscribir: <code>leadgen</code></div>
+        </div>
+        <div className="p-3 rounded-[10px]" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>
+          <div className="text-[11px] font-bold uppercase mb-1" style={{ color: "var(--faint)" }}>Estado de la App</div>
+          <div className="text-[12.5px]">App (ID+Secret): {cfg?.app_configured ? "✅ configurada" : "⚠️ falta META_APP_ID/SECRET"}</div>
+          <div className="text-[12.5px]">Verify token: {cfg?.verify_token_set ? "✅ definido" : "⚠️ falta META_VERIFY_TOKEN"}</div>
+          <div className="text-[12px]" style={{ color: "var(--faint)" }}>Graph {cfg?.graph_version}</div>
+        </div>
+      </div>
+
+      <form onSubmit={connect} className="flex gap-3 flex-wrap items-end mb-4">
+        <Field label="Page ID"><input value={f.page_id} onChange={(e) => setF({ ...f, page_id: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input} placeholder="1234567890" /></Field>
+        <Field label="Nombre (opcional)"><input value={f.page_name} onChange={(e) => setF({ ...f, page_name: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none" style={input} /></Field>
+        <Field label="Page Access Token"><input value={f.page_access_token} onChange={(e) => setF({ ...f, page_access_token: e.target.value })} className="px-3 py-2 rounded-[10px] text-[13px] outline-none min-w-[240px]" style={input} placeholder="EAAG… (larga duración)" /></Field>
+        <button type="submit" className="px-4 py-2 rounded-[10px] text-[13px] font-semibold text-white" style={btnPri}>Conectar página</button>
+      </form>
+
+      {pages.filter((p) => p.is_active).length > 0 && (
+        <table className="w-full"><thead><tr>{["Página", "Page ID", ""].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead><tbody>
+          {pages.filter((p) => p.is_active).map((p) => (
+            <tr key={p.id}>
+              <td className="py-2 text-[13px] font-semibold" style={{ borderTop: "1px solid var(--line)" }}>{p.page_name || "—"}</td>
+              <td className="py-2 text-[12px] font-mono" style={{ borderTop: "1px solid var(--line)", color: "var(--muted)" }}>{p.page_id}</td>
+              <td className="py-2 text-right" style={{ borderTop: "1px solid var(--line)" }}><button onClick={() => disconnect(p.id)} className="text-[12px] font-semibold" style={{ color: "var(--bad,#e34948)" }}>Desconectar</button></td>
+            </tr>
+          ))}
+        </tbody></table>
+      )}
+    </Card>
   );
 }
 
