@@ -81,6 +81,27 @@ def _client_dict(db: Session, t: Tenant) -> dict:
     }
 
 
+class EmailTestIn(BaseModel):
+    to: str
+
+
+@router.get("/email/config")
+def email_config() -> dict:
+    s = get_settings()
+    return {"configured": bool(s.resend_api_key and s.resend_from), "from": s.resend_from or None}
+
+
+@router.post("/email/test")
+def email_test(body: EmailTestIn) -> dict:
+    from app.integrations import email as mailer
+
+    ok, detail = mailer.send_email(
+        body.to, "Prueba de correo · zühma+",
+        mailer._BASE.format(body="<p style='font-size:14px'>Correo de prueba desde el portal ✓</p>"),
+    )
+    return {"ok": ok, "detail": detail}
+
+
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db)) -> dict:
     """Vista general del negocio para el admin (datos de la base propia)."""
@@ -274,7 +295,20 @@ def invite(client_id: int, body: InviteIn, db: Session = Depends(get_db)) -> dic
     )
     db.add(user)
     db.commit()
-    return {"status": "invited", "email": email, "action_link": invited.action_link}
+
+    # Envía la invitación por correo (Resend). Si no está configurado o falla, se
+    # devuelve el action_link para que el admin lo comparta manualmente.
+    email_sent, email_detail = False, None
+    if invited.action_link:
+        from app.integrations import email as mailer
+
+        subject, html_body = mailer.invite_email(tenant.name, invited.action_link)
+        email_sent, email_detail = mailer.send_email(email, subject, html_body)
+
+    return {
+        "status": "invited", "email": email, "action_link": invited.action_link,
+        "email_sent": email_sent, "email_detail": email_detail,
+    }
 
 
 # ---------------- Servicios / plan ---------------- #

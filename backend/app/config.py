@@ -45,6 +45,12 @@ class Settings(BaseSettings):
     leadhub_mode: str = "stub"  # stub | live
     leadhub_base_url: str = ""
 
+    # --- Resend (envío de correos: invitaciones, notificaciones) ---
+    resend_api_key: str = ""
+    resend_from: str = ""       # p.ej. "Zuhma <no-reply@zuhma.online>"
+    resend_reply_to: str = ""   # opcional
+    portal_base_url: str = ""   # p.ej. https://portal.zuhma.online (para enlaces en correos)
+
     # --- Meta Lead Ads (integración nativa; secretos solo backend) ---
     meta_app_id: str = ""
     meta_app_secret: str = ""

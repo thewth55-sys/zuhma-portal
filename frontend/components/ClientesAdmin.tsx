@@ -178,10 +178,18 @@ function ClientDetail({ client, onBack, onImpersonate }: { client: Client; onBac
     e.preventDefault();
     if (!invite.email.trim()) return;
     try {
-      const r = await api<{ status: string; action_link: string | null; message?: string }>(`/admin/clients/${client.id}/invite`, { method: "POST", body: JSON.stringify(invite) });
-      setInviteLink(r.action_link);
+      const r = await api<{ status: string; action_link: string | null; message?: string; email_sent?: boolean }>(`/admin/clients/${client.id}/invite`, { method: "POST", body: JSON.stringify(invite) });
       setInvite({ email: "", full_name: "" });
-      toast(r.status === "reassigned" ? (r.message ?? "Reasignado") : "Invitación creada ✓");
+      if (r.status === "reassigned") {
+        setInviteLink(null);
+        toast(r.message ?? "Reasignado");
+      } else if (r.email_sent) {
+        setInviteLink(null);
+        toast("Invitación enviada por correo ✓");
+      } else {
+        setInviteLink(r.action_link);
+        toast("Usuario creado · el correo no salió, comparte el enlace");
+      }
       load();
     } catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "No se pudo invitar"); }
   }
