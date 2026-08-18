@@ -14,7 +14,7 @@ type Config = {
   penalties: Question[];
   info_fields: Question[];
 };
-type Event = { event: string; destination: string; status: string; event_id: string; value: number | null; sent_at: string | null };
+type Event = { event: string; destination: string; status: string; event_id: string; value: number | null; sent_at: string | null; response?: string | null };
 type Activity = { kind: string; text: string; at: string | null };
 type Detail = {
   id: string; name: string; affinity: number | null; band: string | null; channel: string; status: string;
@@ -305,7 +305,7 @@ export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", confi
               <div style={{ color: "var(--muted)" }}>Sin eventos todavía.</div>
             ) : (
               <table className="w-full">
-                <thead><tr>{["Evento", "Destino", "Estado", "event_id"].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead>
+                <thead><tr>{["Evento", "Destino", "Estado", "event_id", "Detalle"].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead>
                 <tbody>
                   {detail.events.map((e, i) => (
                     <tr key={i}>
@@ -315,6 +315,7 @@ export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", confi
                         <span className="text-[12px] font-semibold px-[9px] py-[3px] rounded-[20px]" style={e.status === "sent" ? { background: "#e7f7f0", color: "#0f7a54" } : { background: "#fdf3dd", color: "#8a6b16" }}>{EVENT_STATUS_LABEL[e.status] ?? e.status}</span>
                       </td>
                       <td className="py-2 text-[12px] font-mono" style={{ borderTop: "1px solid var(--line)", color: "var(--muted)" }}>{e.event_id}</td>
+                      <td className="py-2 text-[11px]" style={{ borderTop: "1px solid var(--line)", color: "var(--muted)", maxWidth: 240 }} title={e.response ?? ""}><span className="block truncate">{e.response ?? "—"}</span></td>
                     </tr>
                   ))}
                 </tbody>

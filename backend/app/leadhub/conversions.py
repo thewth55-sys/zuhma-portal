@@ -35,35 +35,41 @@ def flush_lead(db: Session, tenant: Tenant, lead_id: str) -> dict:
     sent = failed = skipped = 0
 
     for event in lead.events:
-        if event.status != EventStatus.queued:
+        if event.status == EventStatus.sent:  # ya enviado; reintenta queued Y failed
             continue
         dest = event.destination  # meta | google | both
-        results: list[tuple[str, bool, str]] = []
+        # outcome: "ok" (enviado), "failed" (intentado y falló), "skipped" (sin credenciales)
+        results: list[tuple[str, str, str]] = []
 
         if dest in ("meta", "both"):
             if config and config.meta_ready:
                 ok, detail = capi.send(config, lead, event)
-                results.append(("meta", ok, detail))
+                results.append(("meta", "ok" if ok else "failed", detail))
             else:
-                results.append(("meta", False, "Meta CAPI no configurado para el cliente."))
+                results.append(("meta", "skipped", "Meta CAPI sin configurar."))
 
         if dest in ("google", "both"):
             if config and config.google_ready:
                 ok, detail = google_ads.send(config, lead, event)
-                results.append(("google", ok, detail))
+                results.append(("google", "ok" if ok else "failed", detail))
             else:
-                results.append(("google", False, "Google Ads no configurado para el cliente."))
+                results.append(("google", "skipped", "Google Ads sin configurar."))
 
-        # 'both' → basta que UNO tenga éxito para marcar enviado; si no, failed.
-        any_ok = any(ok for _, ok, _ in results)
-        event.response = " | ".join(f"{d}: {'ok' if ok else 'x'} {msg}" for d, ok, msg in results)[:1000]
+        any_ok = any(o == "ok" for _, o, _ in results)
+        attempted = any(o in ("ok", "failed") for _, o, _ in results)
+        event.response = " | ".join(f"{d}: {o} — {msg}" for d, o, msg in results)[:1000]
+
         if any_ok:
             event.status = EventStatus.sent
             event.sent_at = datetime.now(timezone.utc)
             sent += 1
-        else:
+        elif attempted:
             event.status = EventStatus.failed
             failed += 1
+        else:
+            # Ningún destino configurado: se queda EN COLA hasta tener credenciales.
+            event.status = EventStatus.queued
+            skipped += 1
 
     db.commit()
     return {"sent": sent, "failed": failed, "skipped": skipped}

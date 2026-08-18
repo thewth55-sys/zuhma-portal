@@ -86,7 +86,7 @@ class LeadRepository:
             },
             "events": [
                 {"event": e.event_name, "destination": e.destination, "status": e.status.value,
-                 "event_id": e.event_id, "value": e.value,
+                 "event_id": e.event_id, "value": e.value, "response": e.response,
                  "sent_at": e.sent_at.isoformat() if e.sent_at else None}
                 for e in sorted(lead.events, key=lambda x: x.id)
             ],
