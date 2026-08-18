@@ -18,12 +18,15 @@ _STANDARD = {"full_name", "first_name", "last_name", "email", "phone_number", "c
 _LEAD_FIELDS = "field_data,ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,form_id,created_time,platform"
 
 
-def verify_signature(raw_body: bytes, signature_header: str | None) -> bool:
-    """Valida X-Hub-Signature-256 (HMAC-SHA256 del cuerpo crudo con el App Secret)."""
-    s = get_settings()
-    if not s.meta_app_secret or not signature_header or not signature_header.startswith("sha256="):
+def verify_signature(raw_body: bytes, signature_header: str | None, app_secret: str | None = None) -> bool:
+    """Valida X-Hub-Signature-256 (HMAC-SHA256 del cuerpo crudo con el App Secret).
+
+    `app_secret` explícito → App propia del cliente; si es None, usa el global de Zuhma.
+    """
+    secret = app_secret or get_settings().meta_app_secret
+    if not secret or not signature_header or not signature_header.startswith("sha256="):
         return False
-    expected = hmac.new(s.meta_app_secret.encode(), raw_body, hashlib.sha256).hexdigest()
+    expected = hmac.new(secret.encode(), raw_body, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature_header.split("=", 1)[1])
 
 

@@ -1,4 +1,9 @@
-"""Webhooks de plataformas. Meta Lead Ads (leadgen) → Lead Hub, nativo (sin n8n)."""
+"""Webhooks de plataformas. Meta Lead Ads (leadgen) → Lead Hub, nativo (sin n8n).
+
+Dos rutas:
+  /webhooks/meta            → App GLOBAL de Zuhma (credenciales del entorno).
+  /webhooks/meta/{token}    → App PROPIA del cliente (credenciales del tenant).
+"""
 
 from __future__ import annotations
 
@@ -21,21 +26,15 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 settings = get_settings()
 
 
-@router.get("/meta")
-async def verify_meta(request: Request) -> PlainTextResponse:
-    """Verificación del webhook: Meta manda hub.challenge al registrar la URL."""
+def _challenge(request: Request, verify_token: str | None) -> PlainTextResponse:
     p = request.query_params
-    if p.get("hub.mode") == "subscribe" and p.get("hub.verify_token") == settings.meta_verify_token and settings.meta_verify_token:
+    if p.get("hub.mode") == "subscribe" and verify_token and p.get("hub.verify_token") == verify_token:
         return PlainTextResponse(p.get("hub.challenge", ""))
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Verify token no coincide.")
 
 
-@router.post("/meta")
-async def receive_meta(request: Request, db: Session = Depends(get_db)) -> dict:
-    raw = await request.body()
-    if not meta.verify_signature(raw, request.headers.get("X-Hub-Signature-256")):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Firma inválida.")
-
+def _process_leadgen(raw: bytes, db: Session) -> int:
+    """Parsea el payload y crea los leads. Devuelve cuántos procesó."""
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
@@ -62,6 +61,38 @@ async def receive_meta(request: Request, db: Session = Depends(get_db)) -> dict:
                     processed += 1
             except Exception:  # noqa: BLE001 — nunca fallar el webhook (Meta reintenta)
                 logger.exception("Error procesando leadgen_id=%s", leadgen_id)
+    return processed
 
-    # Siempre 200 para que Meta no reintente en bucle.
-    return {"received": True, "processed": processed}
+
+# ---- App global de Zuhma ---- #
+
+@router.get("/meta")
+async def verify_meta(request: Request) -> PlainTextResponse:
+    return _challenge(request, settings.meta_verify_token)
+
+
+@router.post("/meta")
+async def receive_meta(request: Request, db: Session = Depends(get_db)) -> dict:
+    raw = await request.body()
+    if not meta.verify_signature(raw, request.headers.get("X-Hub-Signature-256")):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Firma inválida.")
+    return {"received": True, "processed": _process_leadgen(raw, db)}
+
+
+# ---- App propia del cliente (por token) ---- #
+
+@router.get("/meta/{token}")
+async def verify_meta_client(token: str, request: Request, db: Session = Depends(get_db)) -> PlainTextResponse:
+    tenant = db.scalar(select(Tenant).where(Tenant.meta_webhook_token == token))
+    verify_token = tenant.meta_verify_token if tenant else settings.meta_verify_token
+    return _challenge(request, verify_token)
+
+
+@router.post("/meta/{token}")
+async def receive_meta_client(token: str, request: Request, db: Session = Depends(get_db)) -> dict:
+    tenant = db.scalar(select(Tenant).where(Tenant.meta_webhook_token == token))
+    app_secret = tenant.meta_app_secret if tenant and tenant.meta_app_secret else None
+    raw = await request.body()
+    if not meta.verify_signature(raw, request.headers.get("X-Hub-Signature-256"), app_secret):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Firma inválida.")
+    return {"received": True, "processed": _process_leadgen(raw, db)}

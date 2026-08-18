@@ -32,6 +32,14 @@ class Tenant(Base, TimestampMixin):
     # Token opaco para la ingesta de leads por webhook (Meta/Chatwoot/WordPress/n8n → Lead Hub).
     ingest_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
 
+    # App de Meta PROPIA del cliente (opcional). Si está, sus páginas usan estas
+    # credenciales y una URL de webhook dedicada (meta_webhook_token). Si no, se usa la
+    # App global de Zuhma. NOTA: el secret es sensible; cifrar en reposo a futuro.
+    meta_app_id: Mapped[str | None] = mapped_column(String(64), default=None)
+    meta_app_secret: Mapped[str | None] = mapped_column(String(255), default=None)
+    meta_verify_token: Mapped[str | None] = mapped_column(String(120), default=None)
+    meta_webhook_token: Mapped[str | None] = mapped_column(String(64), unique=True, index=True, default=None)
+
     # Overrides de marca opcionales (logo, color) para white-label futuro.
     brand_primary: Mapped[str | None] = mapped_column(String(9), default=None)
     logo_url: Mapped[str | None] = mapped_column(String(512), default=None)

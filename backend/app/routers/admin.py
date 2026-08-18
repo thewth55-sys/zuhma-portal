@@ -354,6 +354,53 @@ def meta_config() -> dict:
     }
 
 
+class MetaAppIn(BaseModel):
+    app_id: str
+    app_secret: str
+    verify_token: str
+
+
+@router.get("/clients/{client_id}/meta-app")
+def get_client_meta_app(client_id: int, db: Session = Depends(get_db)) -> dict:
+    """Config de la App de Meta PROPIA del cliente (secret enmascarado)."""
+    t = db.get(Tenant, client_id)
+    if t is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    configured = bool(t.meta_app_id and t.meta_app_secret)
+    return {
+        "configured": configured,
+        "app_id": t.meta_app_id,
+        "has_secret": bool(t.meta_app_secret),
+        "verify_token": t.meta_verify_token,
+        "webhook_path": f"/webhooks/meta/{t.meta_webhook_token}" if t.meta_webhook_token else None,
+    }
+
+
+@router.put("/clients/{client_id}/meta-app")
+def set_client_meta_app(client_id: int, body: MetaAppIn, db: Session = Depends(get_db)) -> dict:
+    t = db.get(Tenant, client_id)
+    if t is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    t.meta_app_id = body.app_id.strip()
+    t.meta_app_secret = body.app_secret.strip()
+    t.meta_verify_token = body.verify_token.strip()
+    if not t.meta_webhook_token:
+        t.meta_webhook_token = secrets.token_urlsafe(18)
+    db.commit()
+    return {"configured": True, "app_id": t.meta_app_id, "verify_token": t.meta_verify_token,
+            "webhook_path": f"/webhooks/meta/{t.meta_webhook_token}"}
+
+
+@router.delete("/clients/{client_id}/meta-app")
+def clear_client_meta_app(client_id: int, db: Session = Depends(get_db)) -> dict:
+    t = db.get(Tenant, client_id)
+    if t is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Cliente no encontrado.")
+    t.meta_app_id = t.meta_app_secret = t.meta_verify_token = None
+    db.commit()
+    return {"ok": True}
+
+
 @router.get("/clients/{client_id}/meta-pages")
 def list_meta_pages(client_id: int, db: Session = Depends(get_db)) -> list[dict]:
     pages = db.scalars(select(MetaPage).where(MetaPage.tenant_id == client_id)).all()

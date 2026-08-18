@@ -147,19 +147,40 @@ export function AdminLeads() {
 
 type MetaCfg = { callback_path: string; verify_token_set: boolean; app_configured: boolean; graph_version: string };
 type MetaPage = { id: number; page_id: string; page_name: string | null; is_active: boolean };
+type MetaApp = { configured: boolean; app_id: string | null; has_secret: boolean; verify_token: string | null; webhook_path: string | null };
 
 function MetaConnect({ clientId }: { clientId: number }) {
   const [cfg, setCfg] = useState<MetaCfg | null>(null);
   const [pages, setPages] = useState<MetaPage[]>([]);
+  const [app, setApp] = useState<MetaApp | null>(null);
+  const [appForm, setAppForm] = useState({ app_id: "", app_secret: "", verify_token: "" });
   const [f, setF] = useState({ page_id: "", page_name: "", page_access_token: "" });
 
   const load = useCallback(async () => {
     try {
-      const [c, p] = await Promise.all([api<MetaCfg>("/admin/meta/config"), api<MetaPage[]>(`/admin/clients/${clientId}/meta-pages`)]);
-      setCfg(c); setPages(p);
+      const [c, p, a] = await Promise.all([
+        api<MetaCfg>("/admin/meta/config"),
+        api<MetaPage[]>(`/admin/clients/${clientId}/meta-pages`),
+        api<MetaApp>(`/admin/clients/${clientId}/meta-app`),
+      ]);
+      setCfg(c); setPages(p); setApp(a);
     } catch { /* noop */ }
   }, [clientId]);
   useEffect(() => { load(); }, [load]);
+
+  async function saveApp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!appForm.app_id.trim() || !appForm.app_secret.trim() || !appForm.verify_token.trim()) return;
+    try {
+      await api(`/admin/clients/${clientId}/meta-app`, { method: "PUT", body: JSON.stringify(appForm) });
+      setAppForm({ app_id: "", app_secret: "", verify_token: "" });
+      toast("App del cliente guardada ✓"); load();
+    } catch { toast("No se pudo guardar la App"); }
+  }
+  async function clearApp() {
+    if (!confirm("¿Quitar la App propia? El cliente volverá a usar la App global de Zuhma.")) return;
+    await api(`/admin/clients/${clientId}/meta-app`, { method: "DELETE" }); toast("App propia quitada"); load();
+  }
 
   async function connect(e: React.FormEvent) {
     e.preventDefault();
@@ -175,12 +196,30 @@ function MetaConnect({ clientId }: { clientId: number }) {
     await api(`/admin/clients/${clientId}/meta-pages/${pk}`, { method: "DELETE" }); toast("Página desconectada"); load();
   }
 
-  const callback = cfg ? `${API_BASE}${cfg.callback_path}` : "…";
+  const ownApp = app?.configured && app.webhook_path;
+  const callback = ownApp ? `${API_BASE}${app!.webhook_path}` : cfg ? `${API_BASE}${cfg.callback_path}` : "…";
 
   return (
     <Card title="Meta Lead Ads (integración nativa)">
       <div className="text-[12.5px] mb-3" style={{ color: "var(--muted)" }}>
-        Los leads de formularios de Meta llegan <b>directo</b> aquí (sin n8n). Configura el webhook una vez en tu App de Meta y conecta la página del cliente.
+        Los leads de formularios de Meta llegan <b>directo</b> aquí (sin n8n). {ownApp ? "Este cliente usa su App propia." : "Este cliente usa la App global de Zuhma."} Configura el webhook en la App de Meta y conecta la página.
+      </div>
+
+      <div className="p-3 rounded-[10px] mb-4" style={{ background: ownApp ? "var(--accent-soft)" : "var(--bg)", border: `1px solid ${ownApp ? "#f8d3c8" : "var(--line)"}` }}>
+        <div className="text-[11px] font-bold uppercase mb-1" style={{ color: "var(--faint)" }}>App de Meta propia del cliente (opcional)</div>
+        {ownApp ? (
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="text-[12.5px]">App ID <b>{app!.app_id}</b> · verify token <code>{app!.verify_token}</code> · secret {app!.has_secret ? "✅" : "—"}</div>
+            <button onClick={clearApp} className="text-[12px] font-semibold" style={{ color: "var(--bad,#e34948)" }}>Quitar App propia</button>
+          </div>
+        ) : (
+          <form onSubmit={saveApp} className="flex gap-2 flex-wrap items-end mt-1">
+            <Field label="App ID"><input value={appForm.app_id} onChange={(e) => setAppForm({ ...appForm, app_id: e.target.value })} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} /></Field>
+            <Field label="App Secret"><input value={appForm.app_secret} onChange={(e) => setAppForm({ ...appForm, app_secret: e.target.value })} className="px-3 py-2 rounded-[8px] text-[13px] outline-none min-w-[200px]" style={input} placeholder="secreto de la App" /></Field>
+            <Field label="Verify Token"><input value={appForm.verify_token} onChange={(e) => setAppForm({ ...appForm, verify_token: e.target.value })} className="px-3 py-2 rounded-[8px] text-[13px] outline-none" style={input} placeholder="invéntalo" /></Field>
+            <button type="submit" className="px-3 py-2 rounded-[8px] text-[13px] font-semibold text-white" style={btnPri}>Usar App propia</button>
+          </form>
+        )}
       </div>
       <div className="grid gap-3 mb-4" style={{ gridTemplateColumns: "1fr 1fr" }}>
         <div className="p-3 rounded-[10px]" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>
