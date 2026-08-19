@@ -43,7 +43,7 @@ export function AdminDashboard({ onOpenClients, onOpenLeads }: { onOpenClients: 
       <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
         <Kpi icon="users" val={`${d?.clients_active ?? "—"}/${d?.clients_total ?? "—"}`} lbl="Clientes activos" />
         <Kpi icon="inbox" val={d?.leads_total ?? "—"} lbl="Leads totales" />
-        <Kpi icon="check" val={d?.leads_qualified ?? "—"} lbl="Leads calificados" />
+        <Kpi icon="check" val={d?.leads_qualified ?? "—"} lbl="Leads ganados" />
         <Kpi icon="target" val={d?.events_sent ?? "—"} lbl="Conversiones enviadas" />
       </div>
 
@@ -51,7 +51,7 @@ export function AdminDashboard({ onOpenClients, onOpenLeads }: { onOpenClients: 
         <div className="rounded-card p-[18px]" style={{ background: "var(--surface)", border: "1px solid var(--line)", boxShadow: "0 1px 2px rgba(20,18,40,.04)" }}>
           <div className="flex items-center justify-between mb-3"><h2 className="text-[16px] m-0 font-bold">Clientes</h2><button onClick={onOpenClients} className="text-[12.5px] font-semibold" style={{ color: "var(--accent)" }}>Gestionar →</button></div>
           <table className="w-full">
-            <thead><tr>{["Cliente", "Plan", "Modo", "Leads", "Calif.", "Usuarios"].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead>
+            <thead><tr>{["Cliente", "Plan", "Modo", "Leads", "Ganados", "Usuarios"].map((h) => <th key={h} className="text-left text-[11px] uppercase font-bold pb-2" style={{ color: "var(--faint)" }}>{h}</th>)}</tr></thead>
             <tbody>
               {d?.per_client.map((c) => (
                 <tr key={c.id}>

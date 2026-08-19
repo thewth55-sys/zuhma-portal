@@ -35,6 +35,10 @@ def _minutes_in_inbox(created_at: datetime) -> int:
 _OVERDUE_MIN = 24 * 60
 
 
+class LeadValidationError(ValueError):
+    """Falta un dato obligatorio para cambiar de etapa (comentario / valor / revenue)."""
+
+
 class LeadRepository:
     def __init__(self, db: Session, tenant: Tenant):
         self.db = db
@@ -60,6 +64,8 @@ class LeadRepository:
             "status": lead.status.value,
             "owner": lead.owner,
             "released": lead.released,
+            "deal_value": lead.deal_value,
+            "revenue": lead.revenue,
             "minutes_in_inbox": mins,
             "overdue": lead.status == LeadStatus.pending and mins >= _OVERDUE_MIN,
             "description": lead.description or "",
@@ -221,7 +227,24 @@ class LeadRepository:
         self.db.commit()
         return self.get(lead_id)
 
-    def set_status(self, lead_id: str, status: str) -> dict | None:
+    # Etiquetas de negocio de cada etapa (para mensajes y actividad).
+    _STAGE_LABEL = {
+        LeadStatus.pending: "Nuevo",
+        LeadStatus.waiting: "Seguimiento",
+        LeadStatus.potential: "Ganado",
+        LeadStatus.discarded: "Perdido",
+    }
+
+    def set_status(
+        self,
+        lead_id: str,
+        status: str,
+        *,
+        comment: str | None = None,
+        value: int | None = None,
+        revenue: int | None = None,
+        author: str | None = None,
+    ) -> dict | None:
         try:
             new = LeadStatus(status)
         except ValueError:
@@ -232,16 +255,42 @@ class LeadRepository:
         )
         if lead is None:
             return None
+
+        note = (comment or "").strip()
+        # Reglas de negocio: Perdido exige motivo; Ganado exige motivo + valor + revenue.
+        if new == LeadStatus.discarded and not note:
+            raise LeadValidationError("Para marcar como Perdido debes agregar un comentario con el motivo.")
+        if new == LeadStatus.potential:
+            if not note:
+                raise LeadValidationError("Para marcar como Ganado debes agregar un comentario.")
+            if value is None or revenue is None:
+                raise LeadValidationError("Para marcar como Ganado debes indicar el valor del lead y el revenue.")
+            if int(value) < 0 or int(revenue) < 0:
+                raise LeadValidationError("El valor y el revenue no pueden ser negativos.")
+
         lead.status = new
-        lead.activities.append(LeadActivity(kind="stage", text=f"Estado → {new.value}."))
+        label = self._STAGE_LABEL.get(new, new.value)
+        lead.activities.append(LeadActivity(kind="stage", text=f"Estado → {label}."))
+
+        if new == LeadStatus.potential:
+            lead.deal_value = int(value)  # type: ignore[arg-type]
+            lead.revenue = int(revenue)   # type: ignore[arg-type]
+            lead.activities.append(LeadActivity(kind="note", text=f"Cierre ganado · valor {lead.deal_value} · revenue {lead.revenue}."))
+
+        who = author or "Cliente"
+        if note:
+            lead.activities.append(LeadActivity(kind="comment", text=f"{who}: {note}"))
+
         # Disparo de conversión según la config (queued hasta tener credenciales del motor).
         cfg_event = self.get_config().get("stage_events", {}).get(new.value)
         if cfg_event and not any(e.event_name == cfg_event["event"] for e in lead.events):
+            # En "Ganado" el valor del evento es el revenue real; en otras etapas, el de la config.
+            ev_value = int(revenue) if (new == LeadStatus.potential and revenue is not None) else cfg_event.get("value")
             lead.events.append(LeadEvent(
                 event_name=cfg_event["event"],
                 destination=cfg_event.get("destination", "both"),
                 event_id=lead.lead_id,
-                value=cfg_event.get("value"),
+                value=ev_value,
             ))
             lead.activities.append(LeadActivity(kind="event", text=f"Evento {cfg_event['event']} en cola → {cfg_event.get('destination','both')}."))
         self.db.commit()

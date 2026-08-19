@@ -55,6 +55,10 @@ class Lead(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, default=None)   # contexto/requerimiento
     session_date: Mapped[date | None] = mapped_column(Date, default=None)
 
+    # Cierre económico (solo al marcar "Ganado"): valor del lead y revenue generado.
+    deal_value: Mapped[int | None] = mapped_column(Integer, default=None)
+    revenue: Mapped[int | None] = mapped_column(Integer, default=None)
+
     # Compuerta de liberación: en agency_managed el cliente solo ve released=True.
     released: Mapped[bool] = mapped_column(default=True, index=True)
 

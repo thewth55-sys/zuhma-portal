@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { Icon } from "./Icon";
+import { QualifyModal, type QualifyPayload } from "./QualifyModal";
 import { api } from "@/lib/api";
 
 type Opt = { value: string; label?: string; points?: number };
@@ -22,9 +23,10 @@ type Detail = {
   cargo: string | null; company_name: string | null; company_size: string | null; website: string | null;
   session_date: string | null; answers: Record<string, unknown>; propensity_score: number | null; propensity_band: string | null;
   attribution: Record<string, string | null>; events: Event[]; activity: Activity[];
+  deal_value: number | null; revenue: number | null;
 };
 
-const STATUS_LABEL: Record<string, string> = { pending: "Pendiente", waiting: "En espera", potential: "Potencial", discarded: "No potencial" };
+const STATUS_LABEL: Record<string, string> = { pending: "Nuevo", waiting: "Seguimiento", potential: "Ganado", discarded: "Perdido" };
 const EVENT_STATUS_LABEL: Record<string, string> = { queued: "En cola", sent: "Enviado", failed: "Falló" };
 
 function bandCls(band: string | null) {
@@ -72,13 +74,14 @@ function Card({ title, tag, children }: { title: string; tag?: string; children:
   );
 }
 
-export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", configPath = "/leads/config", adminActions = false }: { leadId: string; canEdit: boolean; onBack: () => void; basePath?: string; configPath?: string; adminActions?: boolean }) {
+export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", configPath = "/leads/config", adminActions = false, canQualify = true }: { leadId: string; canEdit: boolean; onBack: () => void; basePath?: string; configPath?: string; adminActions?: boolean; canQualify?: boolean }) {
   const [tab, setTab] = useState("resumen");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
   const [comment, setComment] = useState("");
+  const [qualify, setQualify] = useState<"potential" | "discarded" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -129,6 +132,20 @@ export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", confi
     }
   }
 
+  async function setStage(status: string, okMsg: string) {
+    try {
+      const d = await api<Detail>(`${basePath}/${encodeURIComponent(leadId)}/status`, { method: "POST", body: JSON.stringify({ status }) });
+      setDetail(d);
+      toast(okMsg);
+    } catch (e) { toast(e instanceof Error ? e.message.replace(/^API \d+: /, "") : "No se pudo actualizar"); }
+  }
+  async function submitQualify(payload: QualifyPayload) {
+    const d = await api<Detail>(`${basePath}/${encodeURIComponent(leadId)}/status`, { method: "POST", body: JSON.stringify(payload) });
+    setDetail(d);
+    setQualify(null);
+    toast(payload.status === "potential" ? "Marcado como Ganado ✓" : "Marcado como Perdido");
+  }
+
   function setAns(key: string, value: unknown) {
     setAnswers((a) => ({ ...a, [key]: value }));
   }
@@ -156,6 +173,9 @@ export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", confi
 
   return (
     <div className="px-[30px] pt-[26px] pb-[60px] max-w-[1180px]">
+      {qualify && (
+        <QualifyModal kind={qualify} leadName={`${detail.name} · ${detail.id}`} onCancel={() => setQualify(null)} onSubmit={submitQualify} />
+      )}
       <button onClick={onBack} className="text-[13px] font-semibold mb-4" style={{ color: "var(--muted)" }}>← Volver a la bandeja</button>
 
       {/* Encabezado */}
@@ -170,12 +190,30 @@ export function LeadDetail({ leadId, canEdit, onBack, basePath = "/leads", confi
           </div>
           <div className="text-[12px] mt-1 font-mono" style={{ color: "var(--accent)" }}>{detail.id}</div>
         </div>
+        {detail.status === "potential" && (detail.revenue != null || detail.deal_value != null) && (
+          <div className="text-center rounded-[10px] px-4 py-2" style={{ background: "#e7f7f0", color: "#0f7a54" }}>
+            <div className="font-extrabold text-[16px] leading-none">${(detail.revenue ?? 0).toLocaleString("es-MX")}</div>
+            <small className="block text-[10px] font-bold uppercase mt-[3px] opacity-80">Revenue · valor {(detail.deal_value ?? 0).toLocaleString("es-MX")}</small>
+          </div>
+        )}
         <div className="text-center rounded-[10px] px-4 py-2 font-extrabold text-[16px]" style={{ background: bd.bg, color: bd.c }}>
           {bd.label}
           <small className="block text-[10px] font-bold uppercase mt-[2px] opacity-80">Propensidad {detail.propensity_score ?? "—"}/{config.max_score ?? 18}</small>
         </div>
         <span className="text-[12px] font-semibold px-[11px] py-[5px] rounded-[20px]" style={{ background: "#eef4ff", color: "#2a5fb0" }}>{STATUS_LABEL[detail.status] ?? detail.status}</span>
       </div>
+
+      {/* Acciones de etapa */}
+      {canQualify && (
+        <div className="flex gap-2 mb-4 flex-wrap">
+          <button onClick={() => setQualify("potential")} className="text-[12.5px] font-semibold px-[13px] py-[7px] rounded-[10px] text-white" style={{ background: "var(--good,#1baf7a)" }}>🏆 Marcar Ganado</button>
+          <button onClick={() => setQualify("discarded")} className="text-[12.5px] font-semibold px-[13px] py-[7px] rounded-[10px]" style={{ border: "1px solid var(--line)", color: "var(--bad,#e34948)" }}>✕ Marcar Perdido</button>
+          <button onClick={() => setStage("waiting", "Movido a Seguimiento")} className="text-[12.5px] font-semibold px-[13px] py-[7px] rounded-[10px]" style={{ border: "1px solid var(--line)" }}>⏳ Seguimiento</button>
+          {detail.status !== "pending" && (
+            <button onClick={() => setStage("pending", "Movido a Nuevo")} className="text-[12.5px] font-semibold px-[13px] py-[7px] rounded-[10px]" style={{ border: "1px solid var(--line)", color: "var(--muted)" }}>↺ Nuevo</button>
+          )}
+        </div>
+      )}
 
       {/* Sub-pestañas */}
       <div className="inline-flex gap-[6px] mb-[18px] p-[4px] rounded-xl" style={{ background: "var(--bg)", border: "1px solid var(--line)" }}>

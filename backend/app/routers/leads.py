@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.deps import get_current_user, get_lead_repo, require_editor
-from app.leadhub.repository import LeadRepository
+from app.leadhub.repository import LeadRepository, LeadValidationError
 from app.models import AppUser
 
 router = APIRouter(prefix="/leads", tags=["leads"])
@@ -21,6 +21,9 @@ _VALID_STATUS = {"pending", "waiting", "potential", "discarded"}
 
 class StatusIn(BaseModel):
     status: str
+    comment: str | None = None   # obligatorio al marcar Perdido o Ganado
+    value: int | None = None     # obligatorio al marcar Ganado (valor del lead)
+    revenue: int | None = None   # obligatorio al marcar Ganado (revenue generado)
 
 
 class CommentIn(BaseModel):
@@ -116,11 +119,16 @@ def update_lead(
 # --- Calificar y comentar: cliente + equipo Zuhma --- #
 
 @router.post("/{lead_id}/status")
-def set_status(lead_id: str, body: StatusIn, repo: LeadRepository = Depends(get_lead_repo)) -> dict:
+def set_status(lead_id: str, body: StatusIn, repo: LeadRepository = Depends(get_lead_repo), user: AppUser = Depends(get_current_user)) -> dict:
     if body.status not in _VALID_STATUS:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
     try:
-        updated = repo.set_status(lead_id, body.status)
+        updated = repo.set_status(
+            lead_id, body.status, comment=body.comment, value=body.value,
+            revenue=body.revenue, author=user.full_name or user.email,
+        )
+    except LeadValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
     except KeyError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
     if updated is None:

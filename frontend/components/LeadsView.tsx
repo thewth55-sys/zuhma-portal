@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Icon } from "./Icon";
 import { LeadDetail } from "./LeadDetail";
+import { QualifyModal, type QualifyPayload } from "./QualifyModal";
 import { api } from "@/lib/api";
 import type { IconName } from "@/lib/nav";
 
@@ -25,10 +26,10 @@ type Kpis = { pending: number; avg_response_hours: number; qualified_month: numb
 type ListResp = { leads: Lead[]; counts: Record<string, number> };
 
 const TABS: { key: string; label: string }[] = [
-  { key: "pending", label: "Pendientes" },
-  { key: "waiting", label: "En espera" },
-  { key: "potential", label: "Potenciales" },
-  { key: "discarded", label: "No potenciales" },
+  { key: "pending", label: "Nuevo" },
+  { key: "waiting", label: "Seguimiento" },
+  { key: "potential", label: "Ganado" },
+  { key: "discarded", label: "Perdido" },
   { key: "all", label: "Todos" },
 ];
 
@@ -87,6 +88,7 @@ export function LeadsView({ canEdit }: { canEdit: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [qualify, setQualify] = useState<{ lead: Lead; kind: "potential" | "discarded" } | null>(null);
   const [form, setForm] = useState({ contact_name: "", channel: "Meta Ads", phone: "" });
 
   const load = useCallback(async (status: string) => {
@@ -115,6 +117,15 @@ export function LeadsView({ canEdit }: { canEdit: boolean }) {
     } catch {
       toast("No se pudo actualizar el lead");
     }
+  }
+
+  // Ganado/Perdido pasan por el modal (datos obligatorios); el backend los valida.
+  async function submitQualify(payload: QualifyPayload) {
+    if (!qualify) return;
+    await api(`/leads/${encodeURIComponent(qualify.lead.id)}/status`, { method: "POST", body: JSON.stringify(payload) });
+    toast(payload.status === "potential" ? "Marcado como Ganado ✓" : "Marcado como Perdido");
+    setQualify(null);
+    await load(tab);
   }
 
   async function submitAdd(e: React.FormEvent) {
@@ -156,6 +167,9 @@ export function LeadsView({ canEdit }: { canEdit: boolean }) {
 
   return (
     <div className="px-[30px] pt-[26px] pb-[60px] max-w-[1180px]">
+      {qualify && (
+        <QualifyModal kind={qualify.kind} leadName={`${qualify.lead.name} · ${qualify.lead.id}`} onCancel={() => setQualify(null)} onSubmit={submitQualify} />
+      )}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-[27px] tracking-tight m-0 mb-[3px] font-bold">Bandeja de leads</h1>
@@ -202,7 +216,7 @@ export function LeadsView({ canEdit }: { canEdit: boolean }) {
       )}
 
       <div className="grid gap-4 my-5" style={{ gridTemplateColumns: "repeat(4,1fr)" }}>
-        <Kpi icon="inbox" val={String(kpis?.pending ?? "—")} lbl="Pendientes por atender" />
+        <Kpi icon="inbox" val={String(kpis?.pending ?? "—")} lbl="Nuevos por atender" />
         <Kpi icon="clock" val={kpis ? `${kpis.avg_response_hours} h` : "—"} lbl="Tiempo prom. de respuesta" />
         <Kpi icon="check" val={String(kpis?.qualified_month ?? "—")} lbl="Calificados este mes" />
         <Kpi icon="target" val={kpis ? `${kpis.answered_under_24h_pct}%` : "—"} lbl="Atendidos < 24 h" />
@@ -274,9 +288,9 @@ export function LeadsView({ canEdit }: { canEdit: boolean }) {
                   {bd.label}<small className="block text-[10px] font-bold uppercase mt-[3px] opacity-80">Propensidad {l.affinity ?? "—"}/18</small>
                 </div>
                 <button onClick={() => setOpenId(l.id)} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--bg)" }}>Ver detalle →</button>
-                <button onClick={() => act(l, "potential", "Marcado como Potencial ✓")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={{ background: "var(--good,#1baf7a)" }}>✓ Potencial</button>
-                <button onClick={() => act(l, "discarded", "Marcado como No potencial")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>✕ No potencial</button>
-                <button onClick={() => act(l, "waiting", "Movido a En espera")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>⏳ En espera</button>
+                <button onClick={() => setQualify({ lead: l, kind: "potential" })} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px] text-white" style={{ background: "var(--good,#1baf7a)" }}>🏆 Ganado</button>
+                <button onClick={() => setQualify({ lead: l, kind: "discarded" })} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>✕ Perdido</button>
+                <button onClick={() => act(l, "waiting", "Movido a Seguimiento")} className="w-full justify-center text-[12.5px] font-semibold px-[11px] py-[6px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--surface)" }}>⏳ Seguimiento</button>
               </div>
             </div>
           );

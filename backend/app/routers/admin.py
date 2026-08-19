@@ -23,7 +23,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.deps import allowed_client_ids, require_admin, require_internal, require_permission
 from app.integrations import meta as meta_api
-from app.leadhub.repository import LeadRepository
+from app.leadhub.repository import LeadRepository, LeadValidationError
 from app.models import (
     ALL_PERMISSIONS,
     AppUser,
@@ -585,7 +585,12 @@ def admin_update_lead(client_id: int, lead_id: str, body: LeadPatch, db: Session
 def admin_set_status(client_id: int, lead_id: str, body: StatusIn, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
     repo = _lead_repo(client_id, db)
     try:
-        updated = repo.set_status(lead_id, body.status)
+        updated = repo.set_status(
+            lead_id, body.status, comment=body.comment, value=body.value,
+            revenue=body.revenue, author=_p.full_name or _p.email,
+        )
+    except LeadValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc))
     except KeyError:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Estado inválido: {body.status}")
     if updated is None:

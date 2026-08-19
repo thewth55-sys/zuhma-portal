@@ -20,6 +20,7 @@ function toast(msg: string) {
   setTimeout(() => t.remove(), 2000);
 }
 function slug(s: string) { return s.toLowerCase().normalize("NFKD").replace(/[^\w]+/g, "_").replace(/^_|_$/g, "") || "campo"; }
+const STATUS_LABEL: Record<string, string> = { pending: "Nuevo", waiting: "Seguimiento", potential: "Ganado", discarded: "Perdido" };
 function bandCls(band: string | null) {
   return band === "alta" ? { bg: "#e7f7f0", c: "#0f7a54", label: "Alta" } : band === "media" ? { bg: "#fdf3dd", c: "#8a6b16", label: "Media" } : { bg: "#fde8e7", c: "#b23a3a", label: "Baja" };
 }
@@ -127,7 +128,7 @@ export function AdminLeads({ isAdmin = false }: { isAdmin?: boolean }) {
                   <td className="py-3" style={{ borderTop: "1px solid var(--line)" }}><div className="font-semibold text-[13.5px]">{l.name}</div><div className="text-[12px] font-mono" style={{ color: "var(--faint)" }}>{l.id}</div></td>
                   <td className="py-3" style={{ borderTop: "1px solid var(--line)" }}><span className="text-[12px] font-bold px-[9px] py-[3px] rounded-[20px]" style={{ background: bd.bg, color: bd.c }}>{bd.label} {l.affinity ?? "—"}/18</span></td>
                   <td className="py-3 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{l.channel}</td>
-                  <td className="py-3 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{l.status}</td>
+                  <td className="py-3 text-[13px]" style={{ borderTop: "1px solid var(--line)" }}>{STATUS_LABEL[l.status] ?? l.status}</td>
                   {agency && (
                     <td className="py-3" style={{ borderTop: "1px solid var(--line)" }}>
                       {l.released
