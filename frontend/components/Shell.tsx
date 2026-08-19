@@ -76,7 +76,7 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         permissions={user.permissions}
       />
       <div className="flex-1 min-w-0">
-        <Topbar impersonating={impersonating?.name ?? null} onStopImpersonate={stopImpersonate} />
+        <Topbar impersonating={impersonating?.name ?? null} onStopImpersonate={stopImpersonate} showBell={canSwitch} />
         {mode === "cliente" && route === "leads" ? (
           <LeadsView canEdit={canSwitch && !impersonating} />
         ) : mode === "admin" && route === "dash" ? (

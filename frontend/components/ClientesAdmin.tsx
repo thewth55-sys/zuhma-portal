@@ -219,6 +219,8 @@ function ClientDetail({ client, onBack, onImpersonate, isAdmin = false }: { clie
         <button onClick={() => onImpersonate(client.id, client.name)} className="text-[13px] font-semibold px-[13px] py-[8px] rounded-[10px]" style={{ border: "1px solid var(--line)", background: "var(--accent-soft)", color: "var(--accent)" }}>👁 Ver como cliente</button>
       </div>
 
+      <AlertPrefToggle clientId={client.id} clientName={client.name} />
+
       <Card title="Datos del cliente">
         <div className="flex gap-4 flex-wrap items-end">
           <div className="flex flex-col gap-1"><label className="text-[11px] font-bold uppercase" style={{ color: "var(--faint)" }}>Plan</label>
@@ -313,5 +315,45 @@ function ClientDetail({ client, onBack, onImpersonate, isAdmin = false }: { clie
         )}
       </Card>
     </div>
+  );
+}
+
+// Silenciar/activar (para MÍ) las alertas de leads nuevos de este cliente.
+function AlertPrefToggle({ clientId, clientName }: { clientId: number; clientName: string }) {
+  const [muted, setMuted] = useState<boolean | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    api<{ muted: boolean }>(`/me/alerts/${clientId}`).then((r) => { if (alive) setMuted(r.muted); }).catch(() => { if (alive) setMuted(false); });
+    return () => { alive = false; };
+  }, [clientId]);
+
+  async function toggle() {
+    if (muted === null || busy) return;
+    setBusy(true);
+    const next = !muted;
+    try {
+      await api(`/me/alerts/${clientId}`, { method: "PUT", body: JSON.stringify({ muted: next }) });
+      setMuted(next);
+      toast(next ? "Alertas silenciadas para ti" : "Alertas activadas ✓");
+    } catch { toast("No se pudo actualizar"); }
+    finally { setBusy(false); }
+  }
+
+  const on = muted === false; // ON = recibe alertas
+  return (
+    <Card title="Mis alertas de leads">
+      <div className="flex items-center justify-between gap-4">
+        <div className="text-[13px]" style={{ color: "var(--muted)" }}>
+          {muted === null ? "Cargando…" : on
+            ? <>Recibes <b style={{ color: "var(--ink)" }}>campana y correo</b> cada vez que ingresa un lead nuevo de <b style={{ color: "var(--ink)" }}>{clientName}</b>.</>
+            : <>Tienes <b style={{ color: "var(--ink)" }}>silenciadas</b> las alertas de leads de {clientName}.</>}
+        </div>
+        <button onClick={toggle} disabled={muted === null || busy} role="switch" aria-checked={on} className="relative w-[52px] h-[28px] rounded-full flex-none transition-colors disabled:opacity-60" style={{ background: on ? "var(--good,#1baf7a)" : "var(--line)" }}>
+          <span className="absolute top-[3px] w-[22px] h-[22px] rounded-full bg-white transition-all" style={{ left: on ? "27px" : "3px", boxShadow: "0 1px 3px rgba(0,0,0,.25)" }} />
+        </button>
+      </div>
+    </Card>
   );
 }

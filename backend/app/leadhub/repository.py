@@ -190,6 +190,12 @@ class LeadRepository:
         lead.events.append(LeadEvent(event_name="Lead", destination="both", event_id=lead.lead_id))
         self.db.commit()
         self.db.refresh(lead)
+        # Alerta al equipo interno asignado (campana + correo). Best-effort.
+        try:
+            from app.leadhub import alerts
+            alerts.notify_new_lead(self.db, self.tenant, lead)
+        except Exception:  # noqa: BLE001 — nunca romper la creación del lead
+            self.db.rollback()
         # admin_view=True: devuelve el lead recién creado aunque nazca sin liberar (agency).
         return self.get(lead.lead_id, admin_view=True)  # type: ignore[return-value]
 

@@ -72,6 +72,36 @@ def otp_email(code: str) -> tuple[str, str]:
     return subject, _BASE.format(body=body)
 
 
+def new_lead_email(client_name: str, lead) -> tuple[str, str]:
+    """Aviso al equipo interno: ingresó un lead nuevo de un cliente."""
+    subject = f"Nuevo lead · {client_name} · zühma+"
+    name = _html.escape(str(getattr(lead, "contact_name", "") or "Lead"))
+    channel = _html.escape(str(getattr(lead, "channel", "") or "Orgánico"))
+    phone = _html.escape(str(getattr(lead, "phone", "") or "—"))
+    mail = _html.escape(str(getattr(lead, "email", "") or "—"))
+    code = _html.escape(str(getattr(lead, "lead_id", "") or ""))
+    portal = (get_settings().portal_base_url or "").rstrip("/")
+    button = _button(portal, "Abrir el portal") if portal else ""
+    body = f"""
+    <h1 style="font-size:20px;margin:0 0 8px">Nuevo lead de {_html.escape(client_name)}</h1>
+    <p style="color:#6b6a7b;font-size:14px;line-height:1.6;margin:0 0 16px">
+      Ingresó un lead a la cuenta. Ábrelo en el portal para atenderlo y calificarlo.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;margin:0 0 18px">
+      <tr><td style="padding:6px 0;color:#9997a8;width:120px">Contacto</td><td style="padding:6px 0;font-weight:700">{name}</td></tr>
+      <tr><td style="padding:6px 0;color:#9997a8">Canal</td><td style="padding:6px 0">{channel}</td></tr>
+      <tr><td style="padding:6px 0;color:#9997a8">Teléfono</td><td style="padding:6px 0">{phone}</td></tr>
+      <tr><td style="padding:6px 0;color:#9997a8">Correo</td><td style="padding:6px 0">{mail}</td></tr>
+      <tr><td style="padding:6px 0;color:#9997a8">Lead ID</td><td style="padding:6px 0;font-family:monospace">{code}</td></tr>
+    </table>
+    {f'<p style="margin:0 0 6px">{button}</p>' if button else ''}
+    <p style="color:#9997a8;font-size:12px;line-height:1.6;margin:14px 0 0">
+      ¿Demasiados avisos de esta cuenta? Silénciala en el portal: Clientes → (cliente) → Alertas de leads.
+    </p>
+    """
+    return subject, _BASE.format(body=body)
+
+
 def reset_email(action_link: str) -> tuple[str, str]:
     """Devuelve (asunto, html) del restablecimiento de contraseña."""
     subject = "Restablece tu contraseña · zühma+"

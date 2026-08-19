@@ -17,6 +17,7 @@ from app.models.lead import (
 from app.models.meta import MetaPage
 from app.models.conversion import ConversionConfig
 from app.models.auth import LoginOtp, MfaSession
+from app.models.notification import LeadAlertMute, Notification
 
 __all__ = [
     "Base",
@@ -38,4 +39,6 @@ __all__ = [
     "ConversionConfig",
     "LoginOtp",
     "MfaSession",
+    "Notification",
+    "LeadAlertMute",
 ]
