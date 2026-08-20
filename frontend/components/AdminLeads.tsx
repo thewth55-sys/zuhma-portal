@@ -35,7 +35,7 @@ function Card({ title, right, children }: { title: string; right?: React.ReactNo
   );
 }
 
-export function AdminLeads({ isAdmin = false }: { isAdmin?: boolean }) {
+export function AdminLeads({ isAdmin = false, target = null, onTargetConsumed }: { isAdmin?: boolean; target?: { clientId: number; leadCode: string } | null; onTargetConsumed?: () => void }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [clientId, setClientId] = useState<number | null>(null);
   const [data, setData] = useState<ListResp | null>(null);
@@ -45,8 +45,19 @@ export function AdminLeads({ isAdmin = false }: { isAdmin?: boolean }) {
   const [showNew, setShowNew] = useState(false);
 
   useEffect(() => {
-    api<Client[]>("/admin/clients").then((cs) => { setClients(cs); if (cs[0]) setClientId(cs[0].id); }).catch(() => toast("Error cargando clientes"));
+    api<Client[]>("/admin/clients").then((cs) => { setClients(cs); if (cs[0] && !target) setClientId(cs[0].id); }).catch(() => toast("Error cargando clientes"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Deep-link desde una notificación: selecciona el cliente y abre ese lead.
+  useEffect(() => {
+    if (target) {
+      setClientId(target.clientId);
+      setOpenLead(target.leadCode);
+      onTargetConsumed?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [target]);
 
   const load = useCallback(async () => {
     if (!clientId) return;

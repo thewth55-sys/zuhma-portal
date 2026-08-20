@@ -18,7 +18,7 @@ function timeAgo(iso: string | null): string {
   return `hace ${Math.floor(h / 24)} d`;
 }
 
-export function NotificationsBell() {
+export function NotificationsBell({ onOpenLead }: { onOpenLead?: (clientId: number, leadCode: string) => void }) {
   const [data, setData] = useState<Resp>({ items: [], unread: 0 });
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -45,6 +45,7 @@ export function NotificationsBell() {
   async function openItem(n: Notif) {
     if (!n.read) { try { await api(`/me/notifications/${n.id}/read`, { method: "POST" }); } catch { /* noop */ } }
     setOpen(false);
+    if (n.tenant_id && n.lead_code && onOpenLead) onOpenLead(n.tenant_id, n.lead_code);
     await load();
   }
 

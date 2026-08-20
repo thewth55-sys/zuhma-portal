@@ -153,7 +153,7 @@ class LeadRepository:
         return self.get(lead_id, admin_view=True)
 
     # --- Mutaciones --- #
-    def create(self, payload: dict) -> dict:
+    def create(self, payload: dict, author: str | None = None) -> dict:
         answers = payload.get("answers") or {}
         score, band = self._score(answers)
         # Liberación según el modelo del cliente: client_managed nace liberado;
@@ -185,7 +185,15 @@ class LeadRepository:
         )
         self.db.add(lead)
         self.db.flush()
-        lead.activities.append(LeadActivity(kind="created", text=f"Lead creado por {payload.get('channel') or 'alta manual'}."))
+        # Atribución de la creación: manual → nombre del usuario; automático → canal/fuente.
+        if author:
+            chan = payload.get("channel") or "Orgánico"
+            created_text = f"Lead creado manualmente por {author} · canal {chan}."
+        else:
+            chan = payload.get("channel") or "Orgánico"
+            src = payload.get("source")
+            created_text = f"Lead recibido por API/webhook · canal {chan}" + (f" · fuente {src}" if src else "") + "."
+        lead.activities.append(LeadActivity(kind="created", text=created_text))
         # Evento base 'Lead' (queued) — el motor CAPI/Google lo enviará cuando haya credenciales.
         lead.events.append(LeadEvent(event_name="Lead", destination="both", event_id=lead.lead_id))
         self.db.commit()
@@ -199,18 +207,23 @@ class LeadRepository:
         # admin_view=True: devuelve el lead recién creado aunque nazca sin liberar (agency).
         return self.get(lead.lead_id, admin_view=True)  # type: ignore[return-value]
 
-    def update(self, lead_id: str, payload: dict) -> dict | None:
+    def update(self, lead_id: str, payload: dict, author: str | None = None) -> dict | None:
         lead = self.db.scalar(select(Lead).where(Lead.tenant_id == self.tenant.id, Lead.lead_id == lead_id))
         if lead is None:
             return None
+        who = f" por {author}" if author else ""
+        changed = []
         for field in ("contact_name", "cargo", "email", "phone", "company_name", "company_size",
                       "website", "channel", "owner", "description"):
-            if field in payload and payload[field] is not None:
+            if field in payload and payload[field] is not None and getattr(lead, field) != payload[field]:
                 setattr(lead, field, payload[field])
+                changed.append(field)
+        if changed:
+            lead.activities.append(LeadActivity(kind="note", text=f"Datos actualizados{who}: {', '.join(changed)}."))
         if "answers" in payload:
             lead.answers = payload["answers"] or {}
             lead.propensity_score, lead.propensity_band = self._score(lead.answers)
-            lead.activities.append(LeadActivity(kind="note", text=f"Calificación recalculada: {lead.propensity_score} ({lead.propensity_band})."))
+            lead.activities.append(LeadActivity(kind="note", text=f"Calificación recalculada{who}: {lead.propensity_score} ({lead.propensity_band})."))
         self.db.commit()
         return self.get(lead_id)
 
@@ -276,7 +289,8 @@ class LeadRepository:
 
         lead.status = new
         label = self._STAGE_LABEL.get(new, new.value)
-        lead.activities.append(LeadActivity(kind="stage", text=f"Estado → {label}."))
+        who = f"{author} marcó" if author else "Estado →"
+        lead.activities.append(LeadActivity(kind="stage", text=f"{who} {label}."))
 
         if new == LeadStatus.potential:
             lead.deal_value = int(value)  # type: ignore[arg-type]

@@ -39,6 +39,16 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
   const [route, setRoute] = useState(canSwitch ? "dash" : "inicio");
   const [impersonating, setImpersonatingState] = useState<{ id: number; name: string } | null>(null);
   const [clientModules, setClientModules] = useState<string[] | null>(user.enabledModules ?? null);
+  const [leadTarget, setLeadTarget] = useState<{ clientId: number; leadCode: string } | null>(null);
+
+  // Deep-link desde la campana: abre el lead en la sección admin de Leads.
+  function openLeadFromNotif(clientId: number, leadCode: string) {
+    setImpersonatingState(null);
+    setImpersonation(null);
+    setMode("admin");
+    setRoute("adminleads");
+    setLeadTarget({ clientId, leadCode });
+  }
 
   const name = user.full_name || user.email;
 
@@ -76,7 +86,7 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         permissions={user.permissions}
       />
       <div className="flex-1 min-w-0">
-        <Topbar impersonating={impersonating?.name ?? null} onStopImpersonate={stopImpersonate} showBell={canSwitch} />
+        <Topbar impersonating={impersonating?.name ?? null} onStopImpersonate={stopImpersonate} showBell={canSwitch} onOpenLead={openLeadFromNotif} />
         {mode === "cliente" && route === "leads" ? (
           <LeadsView canEdit={canSwitch && !impersonating} />
         ) : mode === "admin" && route === "dash" ? (
@@ -84,7 +94,7 @@ export function Shell({ user, onSignOut }: { user: SessionUser; onSignOut: () =>
         ) : mode === "admin" && route === "clientes" ? (
           <ClientesAdmin onImpersonate={startImpersonate} isAdmin={user.role === "admin"} />
         ) : mode === "admin" && route === "adminleads" ? (
-          <AdminLeads isAdmin={user.role === "admin"} />
+          <AdminLeads isAdmin={user.role === "admin"} target={leadTarget} onTargetConsumed={() => setLeadTarget(null)} />
         ) : mode === "admin" && route === "equipo" ? (
           <AdminTeam isAdmin={user.role === "admin"} />
         ) : (mode === "cliente" && route === "perfil") || (mode === "admin" && route === "miperfil") ? (

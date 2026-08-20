@@ -96,11 +96,11 @@ def get_lead(lead_id: str, repo: LeadRepository = Depends(get_lead_repo)) -> dic
 def create_lead(
     body: LeadIn,
     repo: LeadRepository = Depends(get_lead_repo),
-    _: AppUser = Depends(require_editor),
+    user: AppUser = Depends(require_editor),
 ) -> dict:
     if not body.contact_name.strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El nombre del contacto es obligatorio.")
-    return repo.create(body.model_dump())
+    return repo.create(body.model_dump(), author=user.full_name or user.email)
 
 
 @router.patch("/{lead_id}")
@@ -108,9 +108,9 @@ def update_lead(
     lead_id: str,
     body: LeadPatch,
     repo: LeadRepository = Depends(get_lead_repo),
-    _: AppUser = Depends(require_editor),
+    user: AppUser = Depends(require_editor),
 ) -> dict:
-    updated = repo.update(lead_id, body.model_dump(exclude_none=True))
+    updated = repo.update(lead_id, body.model_dump(exclude_none=True), author=user.full_name or user.email)
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
     return updated

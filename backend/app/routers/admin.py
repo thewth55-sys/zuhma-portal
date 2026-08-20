@@ -570,12 +570,12 @@ def admin_get_lead(client_id: int, lead_id: str, db: Session = Depends(get_db)) 
 def admin_create_lead(client_id: int, body: LeadIn, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
     if not body.contact_name.strip():
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "El nombre del contacto es obligatorio.")
-    return _lead_repo(client_id, db).create(body.model_dump())
+    return _lead_repo(client_id, db).create(body.model_dump(), author=_p.full_name or _p.email)
 
 
 @router.patch("/clients/{client_id}/leads/{lead_id}")
-def admin_update_lead(client_id: int, lead_id: str, body: LeadPatch, db: Session = Depends(get_db)) -> dict:
-    updated = _lead_repo(client_id, db).update(lead_id, body.model_dump(exclude_none=True))
+def admin_update_lead(client_id: int, lead_id: str, body: LeadPatch, db: Session = Depends(get_db), _p: AppUser = _leads_perm) -> dict:
+    updated = _lead_repo(client_id, db).update(lead_id, body.model_dump(exclude_none=True), author=_p.full_name or _p.email)
     if updated is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Lead no encontrado.")
     return updated
